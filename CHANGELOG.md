@@ -4,6 +4,18 @@ Entwicklungsnotizen für `musikisum/educandu-plugin-mei-studio`. Nicht auf
 Nutzer:innen ausgerichtet, sondern als Gedächtnisstütze für künftige
 Weiterentwicklung — was wurde gebaut, warum, und welche Fallstricke gab es.
 
+## 2026-07-26 — v1.0.1: Postinstall-Patch fehlte im npm-Paket
+
+**Bug (in v1.0.0):** In oma-web schlug `yarn add` mit
+`Cannot find module '.../scripts/patch-verovio.mjs'` fehl. Ursache: `files`
+in `package.json` listete nur `"dist"`, das `postinstall`-Script braucht
+aber `scripts/patch-verovio.mjs` — npm hat das Verzeichnis beim Publish
+also gar nicht mit ins Paket gepackt. Lokal/per `yarn link` fiel das nie
+auf, weil dort das komplette Repo sichtbar ist, nicht nur die publizierte
+Teilmenge.
+
+Fix: `"scripts"` zu `files` hinzugefügt.
+
 ## 2026-07-25/26 — Umbenennung zu MEI-Studio, Tempo/Lautstärke-Mixer, v1.0.0-Vorbereitung
 
 ### Umbenennung: `mei-import` → `mei-studio`
