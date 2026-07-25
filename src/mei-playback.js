@@ -2,7 +2,7 @@ import { Alert } from 'antd';
 import PropTypes from 'prop-types';
 import Logger from '@educandu/educandu/common/logger.js';
 import { useTranslation } from 'react-i18next';
-import { MAX_NOTE_COUNT_FOR_PLAYBACK } from './constants.js';
+import { DEFAULT_VOICE_VOLUME_VALUE, MAX_NOTE_COUNT_FOR_PLAYBACK } from './constants.js';
 import { handleError } from '@educandu/educandu/ui/error-helper.js';
 import MediaPlayer from '@educandu/educandu/components/media-player/media-player.js';
 import { MEDIA_SCREEN_MODE } from '@educandu/educandu/domain/constants.js';
@@ -14,14 +14,14 @@ import MediaPlayerControls, { MEDIA_PLAYER_CONTROLS_STATE } from '@educandu/educ
 const logger = new Logger(import.meta.url);
 
 const VOLUME = 1;
-const HIGHLIGHTED_VOICE_VELOCITY = 100;
-const OTHER_VOICE_VELOCITY = 45;
+const MIN_VELOCITY = 45;
+const MAX_VELOCITY = 100;
 const DOWNLOAD_FILE_NAME = 'wiedergabe.wav';
 
 const registerUrlForDisposal = url => url && setTimeout(() => URL.revokeObjectURL(url), 1000);
 
-function MeiPlayback({ noteEvents, highlightedVoice }) {
-  const { t } = useTranslation('musikisum/educandu-plugin-mei-import');
+function MeiPlayback({ noteEvents, voiceVolumes }) {
+  const { t } = useTranslation('musikisum/educandu-plugin-mei-studio');
   const isMounted = useIsMounted();
   const mediaPlayerRef = useRef(null);
   const lastNoteEvents = useRef(null);
@@ -35,7 +35,7 @@ function MeiPlayback({ noteEvents, highlightedVoice }) {
 
   useEffect(() => {
     setShouldPlayAfterRendering(false);
-  }, [noteEvents, highlightedVoice]);
+  }, [noteEvents, voiceVolumes]);
 
   useOnComponentUnmount(() => {
     registerUrlForDisposal(soundUrl);
@@ -68,21 +68,23 @@ function MeiPlayback({ noteEvents, highlightedVoice }) {
           // eslint-disable-next-line new-cap
           const scheduler = Scheduler(context, { lookaheadMs: (durationInSeconds * 1000) + 1000 });
           // Only fetch the piano samples actually needed (pitches used in the piece, and only the
-          // two velocity layers we ever play at) instead of the full multi-octave, multi-velocity
-          // sample set - for large, long pieces this cuts the number of sample files fetched (and
-          // thus the time until playback is ready) considerably.
+          // velocity layers our MIN_VELOCITY..MAX_VELOCITY range ever plays at) instead of the
+          // full multi-octave, multi-velocity sample set - for large, long pieces this cuts the
+          // number of sample files fetched (and thus the time until playback is ready) considerably.
           const piano = await new SplendidGrandPiano(context, {
             scheduler,
-            notesToLoad: { notes: uniqueMidiNumbers, velocityRange: [OTHER_VOICE_VELOCITY, HIGHLIGHTED_VOICE_VELOCITY] }
+            notesToLoad: { notes: uniqueMidiNumbers, velocityRange: [MIN_VELOCITY, MAX_VELOCITY] }
           }).load;
           for (const event of noteEvents) {
-            const isHighlighted = !highlightedVoice || event.voiceKey === highlightedVoice;
-            piano.start({
-              note: event.midiNumber,
-              time: event.startMs / 1000,
-              duration: event.durationMs / 1000,
-              velocity: isHighlighted ? HIGHLIGHTED_VOICE_VELOCITY : OTHER_VOICE_VELOCITY
-            });
+            const volume = voiceVolumes[event.voiceKey] ?? DEFAULT_VOICE_VOLUME_VALUE;
+            if (volume > 0) {
+              piano.start({
+                note: event.midiNumber,
+                time: event.startMs / 1000,
+                duration: event.durationMs / 1000,
+                velocity: Math.round(MIN_VELOCITY + ((MAX_VELOCITY - MIN_VELOCITY) * Math.min(1, volume)))
+              });
+            }
           }
         }, { duration: durationInSeconds });
 
@@ -96,7 +98,7 @@ function MeiPlayback({ noteEvents, highlightedVoice }) {
         handleError({ message: error.message, error, logger, t });
       }
     })();
-  }, [hasStartedRendering, noteEvents, highlightedVoice, isTooLargeForPlayback, isMounted, t]);
+  }, [hasStartedRendering, noteEvents, voiceVolumes, isTooLargeForPlayback, isMounted, t]);
 
   const handlePlayClick = () => {
     setShouldPlayAfterRendering(true);
@@ -112,7 +114,7 @@ function MeiPlayback({ noteEvents, highlightedVoice }) {
 
   if (isTooLargeForPlayback) {
     return (
-      <div className="EP_Musikisum_MeiImport_Playback">
+      <div className="EP_Musikisum_MeiStudio_Playback">
         <Alert type="warning" showIcon message={t('playbackTooLargeWarning')} />
       </div>
     );
@@ -131,8 +133,8 @@ function MeiPlayback({ noteEvents, highlightedVoice }) {
 
   if (controlsState) {
     return (
-      <div className="EP_Musikisum_MeiImport_Playback">
-        <div className="EP_Musikisum_MeiImport_Playback-controls">
+      <div className="EP_Musikisum_MeiStudio_Playback">
+        <div className="EP_Musikisum_MeiStudio_Playback-controls">
           <MediaPlayerProgressBar disabled />
           <MediaPlayerControls
             allowLoop
@@ -148,7 +150,7 @@ function MeiPlayback({ noteEvents, highlightedVoice }) {
   }
 
   return (
-    <div className="EP_Musikisum_MeiImport_Playback">
+    <div className="EP_Musikisum_MeiStudio_Playback">
       <MediaPlayer
         allowLoop
         allowDownload
@@ -171,12 +173,12 @@ MeiPlayback.propTypes = {
     startMs: PropTypes.number.isRequired,
     durationMs: PropTypes.number.isRequired
   })),
-  highlightedVoice: PropTypes.string
+  voiceVolumes: PropTypes.objectOf(PropTypes.number)
 };
 
 MeiPlayback.defaultProps = {
   noteEvents: [],
-  highlightedVoice: ''
+  voiceVolumes: {}
 };
 
 export default MeiPlayback;

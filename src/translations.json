@@ -1,8 +1,8 @@
 {
-  "musikisum/educandu-plugin-mei-import": {
+  "musikisum/educandu-plugin-mei-studio": {
     "name": {
-      "en": "MEI import",
-      "de": "MEI-Import"
+      "en": "MEI Studio",
+      "de": "MEI-Studio"
     },
     "zoom": {
       "en": "Zoom",
@@ -33,36 +33,52 @@
       "de": "Dies ist eine große Datei. Laden und Anzeigen können eine Weile dauern."
     },
     "playbackEnabled": {
-      "en": "Enable ear-training mode",
-      "de": "Gehörbildungsmodus aktivieren"
+      "en": "Ear training",
+      "de": "Gehörbildung"
     },
     "playbackEnabledInfo": {
-      "en": "Adds an optional audio playback with a piano sound, generated from the notation, plus the ability to highlight and emphasize a single voice - useful for ear-training exercises with multi-voice pieces. Playback is only loaded once the play button is clicked.",
-      "de": "Fügt eine optionale, aus der Notation erzeugte Audio-Wiedergabe mit Klaviersound hinzu, inklusive der Möglichkeit, eine einzelne Stimme farblich hervorzuheben und beim Abspielen zu betonen - nützlich für Gehörbildungsübungen bei mehrstimmigen Stücken. Die Wiedergabe wird erst beim Klick auf den Abspielbutton geladen."
+      "en": "Adds an optional audio playback with a piano sound, generated from the notation, plus the ability to set the volume of each voice individually - useful for ear-training exercises with multi-voice pieces. Playback is only loaded once the play button is clicked.",
+      "de": "Fügt eine optionale, aus der Notation erzeugte Audio-Wiedergabe mit Klaviersound hinzu, inklusive der Möglichkeit, die Lautstärke jeder Stimme einzeln einzustellen - nützlich für Gehörbildungsübungen bei mehrstimmigen Stücken. Die Wiedergabe wird erst beim Klick auf den Abspielbutton geladen."
     },
-    "highlightedVoice": {
-      "en": "Highlight voice",
-      "de": "Stimme hervorheben"
+    "tempo": {
+      "en": "Tempo",
+      "de": "Tempo"
     },
-    "highlightedVoiceInfo": {
-      "en": "The selected voice is shown in color and played back more prominently than the other voices.",
-      "de": "Die gewählte Stimme wird farblich markiert und beim Abspielen lauter als die übrigen Stimmen wiedergegeben."
+    "tempoInfo": {
+      "en": "Scales the playback speed. This is applied when the audio is generated, not as a playback-rate effect on the finished recording, so pitch stays natural at every speed.",
+      "de": "Skaliert das Wiedergabetempo. Das wirkt schon bei der Erzeugung der Audiodatei, nicht als nachträglicher Geschwindigkeitseffekt auf die fertige Aufnahme, daher bleibt die Tonhöhe bei jedem Tempo natürlich."
     },
-    "noVoiceHighlighted": {
-      "en": "No highlighting",
-      "de": "Keine Hervorhebung"
+    "removeSilence": {
+      "en": "Remove silence",
+      "de": "Stille entfernen"
+    },
+    "removeSilenceInfo": {
+      "en": "Shortens unusually long silent gaps in the playback (e.g. a written-out repeat with no notes for the second pass) down to a normal pause. Turn this off if a piece has an intentionally long pause that should be kept.",
+      "de": "Kürzt ungewöhnlich lange stille Abschnitte in der Wiedergabe (z. B. bei einer ausgeschriebenen Wiederholung ohne Noten für den zweiten Durchgang) auf eine normale Pause. Ausschalten, wenn ein Stück eine bewusst lange Pause hat, die erhalten bleiben soll."
+    },
+    "voiceVolumes": {
+      "en": "Voice volume",
+      "de": "Stimmlautstärke"
+    },
+    "voiceVolumesInfo": {
+      "en": "Sets the volume of each voice for playback. Notes of louder voices are also shown in a stronger highlight color in the notation.",
+      "de": "Legt die Lautstärke jeder Stimme für die Wiedergabe fest. Noten lauterer Stimmen werden zudem stärker in der Hervorhebungsfarbe eingefärbt."
     },
     "voiceFallbackLabel": {
-      "en": "System {{staffN}} · Voice {{layerN}}",
-      "de": "System {{staffN}} · Stimme {{layerN}}"
+      "en": "Voice {voiceNumber}",
+      "de": "Stimme {voiceNumber}"
     },
     "playbackTooLargeWarning": {
       "en": "This piece has too many notes for audio playback to render in a reasonable time. Playback is disabled for this file; the display and voice highlighting are not affected.",
       "de": "Dieses Stück hat zu viele Noten, um die Audio-Wiedergabe in angemessener Zeit zu erzeugen. Die Wiedergabe ist für diese Datei deaktiviert, die Anzeige und die farbliche Stimmenhervorhebung sind davon nicht betroffen."
     },
     "highlightColor": {
-      "en": "Highlight color",
-      "de": "Farbe der Hervorhebung"
+      "en": "Color",
+      "de": "Farbe"
+    },
+    "resizeHint": {
+      "en": "The browser window was resized. Please reload the page so the notation adjusts to the new size correctly.",
+      "de": "Das Browserfenster wurde in der Größe geändert. Bitte die Seite neu laden, damit sich die Notenansicht korrekt anpasst."
     }
   }
 }

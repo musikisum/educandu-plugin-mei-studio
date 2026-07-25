@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { buildNoteEvents, buildVoiceInfoByNoteId, countNotes, extractVoices, getMidiNumberForNote } from './mei-voice-utils.js';
+import { buildVoiceKeyByNoteId, collapseLongSilences, countNotes, extractVoices } from './mei-voice-utils.js';
 
 const MEI_NAMESPACE = 'http://www.music-encoding.org/ns/mei';
 
@@ -69,71 +69,60 @@ describe('extractVoices', () => {
   });
 });
 
-describe('getMidiNumberForNote', () => {
-  function noteElement(attributes) {
-    const doc = new DOMParser().parseFromString(`<mei xmlns="${MEI_NAMESPACE}"/>`, 'application/xml');
-    const note = doc.createElementNS(MEI_NAMESPACE, 'note');
-    for (const [name, value] of Object.entries(attributes)) {
-      note.setAttribute(name, value);
-    }
-    return note;
-  }
-
-  it('computes the MIDI number for a plain natural note (c4 = 60)', () => {
-    expect(getMidiNumberForNote(noteElement({ pname: 'c', oct: '4' }))).toBe(60);
-  });
-
-  it('applies a sharp accidental', () => {
-    expect(getMidiNumberForNote(noteElement({ pname: 'c', oct: '4', accid: 's' }))).toBe(61);
-  });
-
-  it('applies a flat accidental', () => {
-    expect(getMidiNumberForNote(noteElement({ pname: 'e', oct: '4', accid: 'f' }))).toBe(63);
-  });
-
-  it('prefers accid.ges over accid when both are present', () => {
-    expect(getMidiNumberForNote(noteElement({ 'pname': 'c', 'oct': '4', 'accid': 'n', 'accid.ges': 's' }))).toBe(61);
-  });
-
-  it('returns null when pname or oct is missing', () => {
-    expect(getMidiNumberForNote(noteElement({ pname: 'c' }))).toBeNull();
-    expect(getMidiNumberForNote(noteElement({ oct: '4' }))).toBeNull();
+describe('buildVoiceKeyByNoteId', () => {
+  it('maps each note id to its voice key', () => {
+    const voiceKeyByNoteId = buildVoiceKeyByNoteId(TWO_STAFF_TWO_LAYER_MEI);
+    expect(voiceKeyByNoteId.get('s1')).toBe('1-1');
+    expect(voiceKeyByNoteId.get('a1')).toBe('1-2');
+    expect(voiceKeyByNoteId.get('t1')).toBe('2-1');
   });
 });
 
-describe('buildNoteEvents', () => {
-  it('pairs on/off timemap events with pitch and voice information from the MEI', () => {
-    // s1 (staff 1, layer 1, c5=72) sounds 0-500, a1 (staff 1, layer 2, e4=64) sounds 500-1000,
-    // t1 (staff 2, layer 1, c4=60) sounds 1000-1500.
-    const timemapEvents = [
-      { on: ['s1'], tstamp: 0 },
-      { off: ['s1'], on: ['a1'], tstamp: 500 },
-      { off: ['a1'], on: ['t1'], tstamp: 1000 },
-      { off: ['t1'], tstamp: 1500 }
+describe('collapseLongSilences', () => {
+  it('leaves gaps at or below the threshold untouched', () => {
+    const noteEvents = [
+      { startMs: 0, durationMs: 500 },
+      { startMs: 2000, durationMs: 500 }
     ];
+    expect(collapseLongSilences(noteEvents, 1500)).toStrictEqual(noteEvents);
+  });
 
-    const voiceInfoByNoteId = buildVoiceInfoByNoteId(TWO_STAFF_TWO_LAYER_MEI);
-    const noteEvents = buildNoteEvents(voiceInfoByNoteId, timemapEvents);
-
-    expect(noteEvents).toStrictEqual([
-      { midiNumber: 72, voiceKey: '1-1', startMs: 0, durationMs: 500 },
-      { midiNumber: 64, voiceKey: '1-2', startMs: 500, durationMs: 500 },
-      { midiNumber: 60, voiceKey: '2-1', startMs: 1000, durationMs: 500 }
+  it('shortens a gap above the threshold to exactly the threshold, shifting later events', () => {
+    const noteEvents = [
+      { startMs: 0, durationMs: 500 },
+      { startMs: 12000, durationMs: 500 },
+      { startMs: 12500, durationMs: 500 }
+    ];
+    expect(collapseLongSilences(noteEvents, 1500)).toStrictEqual([
+      { startMs: 0, durationMs: 500 },
+      { startMs: 2000, durationMs: 500 },
+      { startMs: 2500, durationMs: 500 }
     ]);
   });
 
-  it('ignores ids that never receive a matching off event', () => {
-    const timemapEvents = [{ on: ['s1'], tstamp: 0 }];
-    const voiceInfoByNoteId = buildVoiceInfoByNoteId(TWO_STAFF_TWO_LAYER_MEI);
-    expect(buildNoteEvents(voiceInfoByNoteId, timemapEvents)).toStrictEqual([]);
+  it('does not shift simultaneous or overlapping notes relative to each other', () => {
+    const noteEvents = [
+      { startMs: 0, durationMs: 1000 },
+      { startMs: 0, durationMs: 500 },
+      { startMs: 500, durationMs: 500 }
+    ];
+    expect(collapseLongSilences(noteEvents, 1500)).toStrictEqual(noteEvents);
   });
-});
 
-describe('buildVoiceInfoByNoteId', () => {
-  it('maps each note id to its MIDI number and voice key', () => {
-    const voiceInfoByNoteId = buildVoiceInfoByNoteId(TWO_STAFF_TWO_LAYER_MEI);
-    expect(voiceInfoByNoteId.get('s1')).toStrictEqual({ midiNumber: 72, voiceKey: '1-1' });
-    expect(voiceInfoByNoteId.get('a1')).toStrictEqual({ midiNumber: 64, voiceKey: '1-2' });
-    expect(voiceInfoByNoteId.get('t1')).toStrictEqual({ midiNumber: 60, voiceKey: '2-1' });
+  it('accumulates shifts across multiple long gaps', () => {
+    const noteEvents = [
+      { startMs: 0, durationMs: 500 },
+      { startMs: 12000, durationMs: 500 },
+      { startMs: 24000, durationMs: 500 }
+    ];
+    expect(collapseLongSilences(noteEvents, 1500)).toStrictEqual([
+      { startMs: 0, durationMs: 500 },
+      { startMs: 2000, durationMs: 500 },
+      { startMs: 4000, durationMs: 500 }
+    ]);
+  });
+
+  it('returns an empty array unchanged', () => {
+    expect(collapseLongSilences([], 1500)).toStrictEqual([]);
   });
 });

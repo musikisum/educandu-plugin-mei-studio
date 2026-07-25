@@ -1,4 +1,4 @@
-import { Spin } from 'antd';
+import { Alert, Spin } from 'antd';
 import MeiPlayback from './mei-playback.js';
 import PropTypes from 'prop-types';
 import { useTranslation } from 'react-i18next';
@@ -7,8 +7,8 @@ import { useIsMounted } from '@educandu/educandu/ui/hooks.js';
 import { applyMeasuresPerLine } from './mei-layout-utils.js';
 import HttpClient from '@educandu/educandu/api-clients/http-client.js';
 import { useService } from '@educandu/educandu/components/container-context.js';
-import { buildNoteEvents, buildVoiceInfoByNoteId } from './mei-voice-utils.js';
-import { DEFAULT_HIGHLIGHT_COLOR_VALUE, DEFAULT_MEASURES_PER_LINE_VALUE, DEFAULT_SPACING_SYSTEM_VALUE } from './constants.js';
+import { buildVoiceKeyByNoteId, collapseLongSilences } from './mei-voice-utils.js';
+import { DEFAULT_HIGHLIGHT_COLOR_VALUE, DEFAULT_MEASURES_PER_LINE_VALUE, DEFAULT_SPACING_SYSTEM_VALUE, DEFAULT_VOICE_VOLUME_VALUE, MAX_SILENCE_MS } from './constants.js';
 
 // Verovio reports the specific reason a file failed to load (e.g. "No <body> element found in
 // the MEI data") only via console.error/console.warn, not via a return value or thrown error.
@@ -45,7 +45,7 @@ function loadVerovioToolkit() {
   return verovioToolkitPromise;
 }
 
-function MeiDocument({ url, withCredentials, zoom, width, spacingSystem, measuresPerLine, playbackEnabled, highlightedVoice, highlightColor }) {
+function MeiDocument({ url, withCredentials, zoom, width, spacingSystem, measuresPerLine, playbackEnabled, tempo, removeSilence, voiceVolumes, highlightColor }) {
   const divRef = useRef(null);
   const isMounted = useIsMounted();
   const lastLoadedUrl = useRef(null);
@@ -56,9 +56,41 @@ function MeiDocument({ url, withCredentials, zoom, width, spacingSystem, measure
   const [errorDetails, setErrorDetails] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [noteEvents, setNoteEvents] = useState([]);
-  const { t } = useTranslation('musikisum/educandu-plugin-mei-import');
+  const [showResizeHint, setShowResizeHint] = useState(false);
+  const initialWindowWidth = useRef(null);
+  const { t } = useTranslation('musikisum/educandu-plugin-mei-studio');
+
+  // The notation's width is only measured once per layout pass (see below), not tracked reactively
+  // via a ResizeObserver - an earlier attempt at that caused a runaway relayout loop (a resize
+  // observer reacting to a vertical scrollbar appearing/disappearing as a side effect of its own
+  // relayout, ad infinitum), which is a worse failure mode than the original "stale width after
+  // resize" issue it was meant to fix. So resizing the window (wider or narrower) after the
+  // notation has already rendered doesn't adjust it live in either direction - just point the user
+  // at the one thing that reliably does fix it. The threshold avoids false positives from a
+  // vertical scrollbar appearing/disappearing, which shifts window.innerWidth by its own width
+  // without the user actually resizing anything.
+  useEffect(() => {
+    const RESIZE_HINT_THRESHOLD_PX = 20;
+    initialWindowWidth.current = window.innerWidth;
+
+    const handleWindowResize = () => {
+      if (Math.abs(window.innerWidth - initialWindowWidth.current) > RESIZE_HINT_THRESHOLD_PX) {
+        setShowResizeHint(true);
+      }
+    };
+
+    window.addEventListener('resize', handleWindowResize);
+    return () => {
+      window.removeEventListener('resize', handleWindowResize);
+    };
+  }, []);
 
   useEffect(() => {
+    // A resize can fire many effect runs in quick succession while the previous one is still
+    // awaiting the toolkit/a fetch. Without this guard, an older run can finish *after* a newer
+    // one and overwrite its correct, up-to-date layout with its own stale (wrong-width) result.
+    let isStale = false;
+
     (async () => {
       if (!url) {
         lastLoadedUrl.current = null;
@@ -88,7 +120,7 @@ function MeiDocument({ url, withCredentials, zoom, width, spacingSystem, measure
         }
 
         const toolkit = await loadVerovioToolkit();
-        if (!isMounted.current || !divRef.current) {
+        if (isStale || !isMounted.current || !divRef.current) {
           return;
         }
 
@@ -107,13 +139,14 @@ function MeiDocument({ url, withCredentials, zoom, width, spacingSystem, measure
           pageWidth: Math.round(containerWidth * 100 / scale),
           pageHeight: 60000,
           spacingSystem,
-          breaks: measuresPerLine > 0 ? 'encoded' : 'auto'
+          breaks: measuresPerLine > 0 ? 'encoded' : 'auto',
+          midiTempoAdjustment: tempo
         });
 
         if (needsReload) {
           if (isNewFile) {
             const res = await httpClient.get(url, { responseType: 'text', withCredentials });
-            if (!isMounted.current) {
+            if (isStale || !isMounted.current) {
               return;
             }
             // eslint-disable-next-line require-atomic-updates
@@ -138,27 +171,51 @@ function MeiDocument({ url, withCredentials, zoom, width, spacingSystem, measure
         // the data or just redid the layout (e.g. playbackEnabled was toggled on for content
         // that was already loaded).
         let newNoteEvents = [];
-        let highlightedNoteIds = null;
+        let noteOpacitiesById = null;
         if (playbackEnabled) {
-          const voiceInfoByNoteId = buildVoiceInfoByNoteId(toolkit.getMEI());
-          newNoteEvents = buildNoteEvents(voiceInfoByNoteId, toolkit.renderToTimemap());
-          if (highlightedVoice) {
-            highlightedNoteIds = new Set(
-              [...voiceInfoByNoteId]
-                .filter(([, voiceInfo]) => voiceInfo.voiceKey === highlightedVoice)
-                .map(([id]) => id)
-            );
+          const voiceKeyByNoteId = buildVoiceKeyByNoteId(toolkit.getMEI());
+
+          // Getting pitch, start time and duration straight from Verovio's own MIDI export
+          // (rather than re-deriving them from the raw MEI, e.g. pitch names/accidentals)
+          // ensures they reflect whatever Verovio actually resolved - key signatures, gestural
+          // accidentals encoded as child <accid> elements, etc. - instead of a re-implementation
+          // of that logic that only covers the cases it was tested against.
+          toolkit.renderToMIDI();
+          const rawNoteEvents = [];
+          for (const [id, voiceKey] of voiceKeyByNoteId) {
+            const midiValues = toolkit.getMIDIValuesForElement(id);
+            if (typeof midiValues.pitch === 'number') {
+              rawNoteEvents.push({
+                midiNumber: midiValues.pitch,
+                voiceKey,
+                startMs: midiValues.time,
+                durationMs: midiValues.duration
+              });
+            }
           }
+          // Verovio reserves playback time for structures it can't resolve without an explicit
+          // MEI <expansion> element (e.g. a written-out repeat with no duplicated/expanded
+          // content) as a silent gap rather than actual notes - shorten those down so playback
+          // doesn't sit through dead air, unless the author wants those gaps kept as-is.
+          newNoteEvents = removeSilence ? collapseLongSilences(rawNoteEvents, MAX_SILENCE_MS) : rawNoteEvents;
+
+          noteOpacitiesById = new Map(
+            [...voiceKeyByNoteId].map(([id, voiceKey]) => {
+              const volume = voiceVolumes[voiceKey] ?? DEFAULT_VOICE_VOLUME_VALUE;
+              return [id, Math.min(1, Math.max(0, volume))];
+            })
+          );
         }
 
         const svg = toolkit.renderToSVG(1);
         if (isMounted.current && divRef.current) {
           divRef.current.innerHTML = svg;
-          if (highlightedNoteIds) {
+          if (noteOpacitiesById) {
             for (const noteGroup of divRef.current.querySelectorAll('.note')) {
-              if (highlightedNoteIds.has(noteGroup.id)) {
+              if (noteOpacitiesById.has(noteGroup.id)) {
                 noteGroup.style.fill = highlightColor;
                 noteGroup.style.stroke = highlightColor;
+                noteGroup.style.opacity = noteOpacitiesById.get(noteGroup.id);
               }
             }
           }
@@ -173,7 +230,7 @@ function MeiDocument({ url, withCredentials, zoom, width, spacingSystem, measure
         lastRawMeiData.current = null;
         // eslint-disable-next-line require-atomic-updates
         lastLoadedMeasuresPerLine.current = null;
-        if (isMounted.current) {
+        if (!isStale && isMounted.current) {
           setHasError(true);
           setErrorDetails(error.message || '');
           setNoteEvents([]);
@@ -182,31 +239,45 @@ function MeiDocument({ url, withCredentials, zoom, width, spacingSystem, measure
           }
         }
       } finally {
-        if (isMounted.current) {
+        if (!isStale && isMounted.current) {
           setIsLoading(false);
         }
       }
     })();
-  }, [url, withCredentials, zoom, width, spacingSystem, measuresPerLine, playbackEnabled, highlightedVoice, highlightColor, httpClient, isMounted]);
+
+    return () => {
+      isStale = true;
+    };
+  }, [url, withCredentials, zoom, width, spacingSystem, measuresPerLine, playbackEnabled, tempo, removeSilence, voiceVolumes, highlightColor, httpClient, isMounted]);
 
   return (
-    <div className="EP_Musikisum_MeiImport_Document">
+    <div className="EP_Musikisum_MeiStudio_Document">
+      {!!showResizeHint && (
+        <Alert
+          type="info"
+          showIcon
+          closable
+          message={t('resizeHint')}
+          onClose={() => setShowResizeHint(false)}
+          className="EP_Musikisum_MeiStudio_Document-resizeHint"
+          />
+      )}
       {!!isLoading && (
-        <div className="EP_Musikisum_MeiImport_Document-spinner">
+        <div className="EP_Musikisum_MeiStudio_Document-spinner">
           <Spin size="large" />
         </div>
       )}
       {!!hasError && (
-        <div className="EP_Musikisum_MeiImport_Document-error">
+        <div className="EP_Musikisum_MeiStudio_Document-error">
           <div>{t('renderError')}</div>
           {!!errorDetails && (
-            <div className="EP_Musikisum_MeiImport_Document-errorDetails">{errorDetails}</div>
+            <div className="EP_Musikisum_MeiStudio_Document-errorDetails">{errorDetails}</div>
           )}
         </div>
       )}
       <div ref={divRef} />
       {!!playbackEnabled && !!noteEvents.length && (
-        <MeiPlayback noteEvents={noteEvents} highlightedVoice={highlightedVoice} />
+        <MeiPlayback noteEvents={noteEvents} voiceVolumes={voiceVolumes} />
       )}
     </div>
   );
@@ -220,7 +291,9 @@ MeiDocument.propTypes = {
   spacingSystem: PropTypes.number,
   measuresPerLine: PropTypes.number,
   playbackEnabled: PropTypes.bool,
-  highlightedVoice: PropTypes.string,
+  tempo: PropTypes.number,
+  removeSilence: PropTypes.bool,
+  voiceVolumes: PropTypes.objectOf(PropTypes.number),
   highlightColor: PropTypes.string
 };
 
@@ -232,7 +305,9 @@ MeiDocument.defaultProps = {
   spacingSystem: DEFAULT_SPACING_SYSTEM_VALUE,
   measuresPerLine: DEFAULT_MEASURES_PER_LINE_VALUE,
   playbackEnabled: false,
-  highlightedVoice: '',
+  tempo: 1,
+  removeSilence: true,
+  voiceVolumes: {},
   highlightColor: DEFAULT_HIGHLIGHT_COLOR_VALUE
 };
 

@@ -1,78 +1,90 @@
-# TODO: esbuild-Fix in oma-web nachziehen, sobald mei-import dort eingebunden wird
+# TODO: Checkliste für die Einbindung von MEI-Studio in oma-web
 
-## Problem
+## 1. Noch nicht auf npm veröffentlicht
 
-Verovio (`verovio/wasm`, siehe `src/mei-document.js`) besteht aus generiertem
-Emscripten/WASM-Loader-Code, der sowohl in Node.js als auch im Browser laufen
-kann. Dafür enthält er einen Node-Fallback-Zweig:
+`package.json` steht noch auf Version `0.0.0`. Bevor `oma-web` per `yarn add
+@musikisum/educandu-plugin-mei-studio` installieren kann, muss das Paket
+zuerst veröffentlicht werden (`npm publish`, mit passender Versionsnummer,
+z. B. `1.0.0`). Zum Vorab-Testen ohne echte Veröffentlichung geht auch ein
+lokaler Pfad- oder Git-Verweis in `oma-web/package.json`
+(`"@musikisum/educandu-plugin-mei-studio": "file:../educandu-plugin-mei-studio"`
+oder ein Git-Tag).
 
-```js
-await import("node:module");
-```
+## 2. Plugin registrieren (Server-Config)
 
-Dieser Zweig wird zur Laufzeit im Browser nie ausgeführt, aber esbuild
-versucht beim Bündeln trotzdem, `node:module` als Modul aufzulösen — und
-bricht ab, weil `node:module` ein Node-Builtin ist, kein npm-Paket:
-
-```
-X [ERROR] Could not resolve "node:module"
-node_modules/verovio/dist/verovio-module.mjs:1:339
-```
-
-In diesem Repo (`mei-import`) ist der Fix bereits in `gulpfile.js`
-(`buildTestAppJs`) eingebaut. **Sobald `oma-web` das Plugin
-`musikisum/educandu-plugin-mei-import` registriert, tritt derselbe Fehler dort
-erneut auf**, weil `oma-web` seinen eigenen esbuild-Build hat, der das Plugin
-mitbündelt.
-
-## Original-Codestelle in oma-web
-
-`d:/dev/oma-web/gulpfile.js`, Funktion `buildJs` (aktueller Stand, unverändert):
+Kein eigener Server-Controller nötig (die README hatte das fälschlich
+erwähnt, ist jetzt korrigiert) - nur Plugin-Liste und Übersetzungen:
 
 ```js
-export async function buildJs() {
-  if (currentAppBuildContext) {
-    await currentAppBuildContext.rebuild();
-  } else {
-    // eslint-disable-next-line require-atomic-updates
-    currentAppBuildContext = await esbuild.bundle({
-      entryPoints: ['./src/main.js'],
-      outdir: './dist',
-      minify: true,
-      incremental: isInWatchMode,
-      inject: ['./src/polyfills.js'],
-      metaFilePath: './dist/.meta.json'
-    });
-  }
-}
+import educandu from '@educandu/educandu';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const meiStudioPluginTranslationsPath = require.resolve('@musikisum/educandu-plugin-mei-studio/translations.json');
+
+educandu({
+  plugins: [/* eure anderen Plugins */, 'musikisum/educandu-plugin-mei-studio'],
+  resources: [/* eure anderen Übersetzungen */, meiStudioPluginTranslationsPath],
+  /* restliche Server-Config */
+});
 ```
 
-## Notwendige Änderung
+Der `resolveCustomPluginInfos`-Eintrag (siehe README) bleibt unverändert
+nötig.
 
-Nur eine neue Zeile im Optionsobjekt der `esbuild.bundle({...})`-Aufrufs
-ergänzen, der Rest (inkl. `if`/`else` fürs Watch-Mode-Rebuild) bleibt
-unverändert:
+## 3. LESS-Import nicht vergessen
 
-```js
-export async function buildJs() {
-  if (currentAppBuildContext) {
-    await currentAppBuildContext.rebuild();
-  } else {
-    // eslint-disable-next-line require-atomic-updates
-    currentAppBuildContext = await esbuild.bundle({
-      entryPoints: ['./src/main.js'],
-      outdir: './dist',
-      minify: true,
-      incremental: isInWatchMode,
-      inject: ['./src/polyfills.js'],
-      metaFilePath: './dist/.meta.json',
-      external: ['node:module']
-    });
-  }
-}
+```less
+@import url('@musikisum/educandu-plugin-mei-studio/mei-studio.less');
 ```
 
-## Referenz
+(Dateiname hat sich mit der Umbenennung von `mei-import.less` geändert.)
 
-Gleicher Fix bereits umgesetzt in diesem Repo:
-`d:/dev/oma-plugin mei-import/gulpfile.js`, Funktion `buildTestAppJs`.
+## 4. Verovio/esbuild-Fix sollte automatisch greifen
+
+Verovios WASM-Loader enthält einen Node-Fallback-Zweig
+(`await import("node:module")`), den esbuild beim Bündeln nicht auflösen
+kann. Der Fix (`scripts/patch-verovio.mjs`, per `postinstall` verdrahtet)
+sitzt im Plugin-Paket selbst und sollte bei jedem `yarn install` in
+`oma-web` automatisch mitlaufen, auch als normale Dependency. Trotzdem
+prüfen:
+
+1. Nutzt `oma-web` `yarn install --ignore-scripts` (z. B. in CI)? Dann läuft
+   der Patch nicht automatisch, müsste separat aufgerufen werden.
+2. Bündelt `oma-web` verovio selbst neu (eigenes esbuild)? Einmal frisch
+   installieren und bauen, dann gegenprüfen
+   (`grep 'join(":")' node_modules/verovio/dist/verovio-module.mjs` sollte
+   nach dem Install den Patch zeigen).
+
+## 5. Peer-Dependencies gegenchecken
+
+Das Plugin erwartet mindestens: `@educandu/educandu >=4.0.0`,
+`antd >=5.21.2`, `@ant-design/icons >=5.5.1`, `react`/`react-dom >=18.2.0`,
+`react-i18next >=13.5.0`, `joi >=17.11.0`. Falls `oma-web` ältere Versionen
+davon nutzt, vorher abgleichen.
+
+## 6. Bundle-Größe im Blick behalten
+
+Verovio bringt ein ~7 MB WASM-Modul mit. Es wird bei uns nur per
+dynamischem `import('verovio/wasm')` nachgeladen, wenn tatsächlich eine
+MEI-Sektion angezeigt wird (nicht Teil des initialen Bundles) - trotzdem
+einmal die tatsächliche Bundle-Analyse von `oma-web` nach der Integration
+anschauen, falls das eigene Chunking anders funktioniert als bei uns.
+
+## 7. Kein Migrationsbedarf für bestehenden Content
+
+Da das Plugin noch nirgends produktiv im Einsatz war, gibt es keine
+gespeicherten Dokumente mit dem alten `typeName`
+(`musikisum/educandu-plugin-mei-import`) zu migrieren. Falls doch irgendwo
+Testinhalte mit dem alten Typnamen existieren sollten: die würden nach der
+Umbenennung nicht mehr auflösen (kein Absturz, die Sektion zeigt einfach
+nichts an - das haben wir gegengetestet), müssten aber neu angelegt werden.
+
+## 8. Einmal grundlegend smoke-testen
+
+Die heutigen Fixes (Absturzsicherheit bei fehlendem `voiceVolumes`,
+CSS-Overflow-Fix bei schmalen Viewports, Resize-Hinweis-Banner) wurden nur
+in der eigenen Test-App verifiziert, noch nicht innerhalb von `oma-web`
+selbst. Nach der Integration einmal durchklicken: Dokument mit
+MEI-Studio-Sektion anlegen, Gehörbildungsmodus aktivieren, Fenstergröße
+ändern.

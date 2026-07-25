@@ -1,6 +1,3 @@
-const PITCH_CLASS_OFFSETS = { c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11 };
-const ACCIDENTAL_OFFSETS = { ff: -2, f: -1, n: 0, s: 1, x: 2, ss: 2 };
-
 function findLabel(defElement) {
   if (!defElement) {
     return null;
@@ -13,24 +10,6 @@ function findLabel(defElement) {
 
   const labelChild = [...defElement.children].find(child => child.localName === 'label');
   return labelChild?.textContent.trim() || null;
-}
-
-export function getMidiNumberForNote(noteElement) {
-  const pname = noteElement.getAttribute('pname');
-  const octAttribute = noteElement.getAttribute('oct');
-  if (!pname || !(pname in PITCH_CLASS_OFFSETS) || !octAttribute) {
-    return null;
-  }
-
-  const oct = Number(octAttribute);
-  if (Number.isNaN(oct)) {
-    return null;
-  }
-
-  const accid = noteElement.getAttribute('accid.ges') || noteElement.getAttribute('accid') || '';
-  const accidentalOffset = ACCIDENTAL_OFFSETS[accid] || 0;
-
-  return ((oct + 1) * 12) + PITCH_CLASS_OFFSETS[pname] + accidentalOffset;
 }
 
 export function countNotes(meiXmlString) {
@@ -70,10 +49,10 @@ export function extractVoices(meiXmlString) {
   return voices;
 }
 
-export function buildVoiceInfoByNoteId(processedMeiXmlString) {
+export function buildVoiceKeyByNoteId(processedMeiXmlString) {
   const doc = new DOMParser().parseFromString(processedMeiXmlString, 'application/xml');
 
-  const idToVoiceInfo = new Map();
+  const voiceKeyById = new Map();
   for (const staff of doc.querySelectorAll('staff')) {
     const staffN = staff.getAttribute('n');
     for (const layer of staff.querySelectorAll('layer')) {
@@ -81,41 +60,31 @@ export function buildVoiceInfoByNoteId(processedMeiXmlString) {
       const voiceKey = `${staffN}-${layerN}`;
       for (const note of layer.querySelectorAll('note')) {
         const id = note.getAttribute('xml:id');
-        const midiNumber = getMidiNumberForNote(note);
-        if (id && midiNumber !== null) {
-          idToVoiceInfo.set(id, { midiNumber, voiceKey });
+        if (id) {
+          voiceKeyById.set(id, voiceKey);
         }
       }
     }
   }
 
-  return idToVoiceInfo;
+  return voiceKeyById;
 }
 
-export function buildNoteEvents(voiceInfoByNoteId, timemapEvents) {
-  const noteEvents = [];
-  const openNoteStartMsById = new Map();
+// Shortens any silent gap longer than maxSilenceMs (during which no voice sounds at all) down to
+// exactly maxSilenceMs, shifting every later event earlier by the difference. Shorter gaps (normal
+// musical rests) are left untouched.
+export function collapseLongSilences(noteEvents, maxSilenceMs) {
+  const sortedEvents = [...noteEvents].sort((a, b) => a.startMs - b.startMs);
 
-  for (const event of timemapEvents) {
-    for (const id of event.on || []) {
-      openNoteStartMsById.set(id, event.tstamp);
+  let soundingUntilMs = 0;
+  let shiftMs = 0;
+
+  return sortedEvents.map(event => {
+    const silenceMs = event.startMs - soundingUntilMs;
+    if (silenceMs > maxSilenceMs) {
+      shiftMs += silenceMs - maxSilenceMs;
     }
-    for (const id of event.off || []) {
-      const hasStart = openNoteStartMsById.has(id);
-      const startMs = openNoteStartMsById.get(id);
-      openNoteStartMsById.delete(id);
-
-      const voiceInfo = voiceInfoByNoteId.get(id);
-      if (hasStart && voiceInfo) {
-        noteEvents.push({
-          midiNumber: voiceInfo.midiNumber,
-          voiceKey: voiceInfo.voiceKey,
-          startMs,
-          durationMs: event.tstamp - startMs
-        });
-      }
-    }
-  }
-
-  return noteEvents;
+    soundingUntilMs = Math.max(soundingUntilMs, event.startMs + event.durationMs);
+    return { ...event, startMs: event.startMs - shiftMs };
+  });
 }

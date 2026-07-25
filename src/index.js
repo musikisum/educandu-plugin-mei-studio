@@ -1,1 +1,1 @@
-export { default } from './mei-import-info.js';
+export { default } from './mei-studio-info.js';

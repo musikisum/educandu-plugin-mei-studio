@@ -1,4 +1,4 @@
-import { Alert, ColorPicker, Form, Select, Switch } from 'antd';
+import { Alert, ColorPicker, Form, Switch } from 'antd';
 import { countNotes, extractVoices } from './mei-voice-utils.js';
 import { useTranslation } from 'react-i18next';
 import Info from '@educandu/educandu/components/info.js';
@@ -12,7 +12,8 @@ import {
   MAX_SPACING_SYSTEM_VALUE, MIN_SPACING_SYSTEM_VALUE,
   MAX_MEASURES_PER_LINE_VALUE, MIN_MEASURES_PER_LINE_VALUE,
   LARGE_FILE_SIZE_WARNING_THRESHOLD_IN_BYTES,
-  MAX_NOTE_COUNT_FOR_PLAYBACK
+  MAX_NOTE_COUNT_FOR_PLAYBACK, DEFAULT_VOICE_VOLUME_VALUE,
+  MAX_TEMPO_VALUE, MIN_TEMPO_VALUE, DEFAULT_TEMPO_VALUE, DEFAULT_REMOVE_SILENCE_VALUE
 } from './constants.js';
 import MarkdownInput from '@educandu/educandu/components/markdown-input.js';
 import ClientConfig from '@educandu/educandu/bootstrap/client-config.js';
@@ -21,13 +22,14 @@ import { sectionEditorProps } from '@educandu/educandu/ui/default-prop-types.js'
 import ObjectWidthSlider from '@educandu/educandu/components/object-width-slider.js';
 import { useService } from '@educandu/educandu/components/container-context.js';
 import { usePercentageFormat } from '@educandu/educandu/components/locale-context.js';
+import TrackMixerDisplay from '@educandu/educandu/components/media-player/track-mixer-display.js';
 import { FORM_ITEM_LAYOUT, SOURCE_TYPE } from '@educandu/educandu/domain/constants.js';
 import { getAccessibleUrl, isInternalSourceType } from '@educandu/educandu/utils/source-utils.js';
 
 const FormItem = Form.Item;
 
-export default function MeiImportEditor({ content, onContentChanged }) {
-  const { t } = useTranslation('musikisum/educandu-plugin-mei-import');
+export default function MeiStudioEditor({ content, onContentChanged }) {
+  const { t } = useTranslation('musikisum/educandu-plugin-mei-studio');
   const isMounted = useIsMounted();
   const clientConfig = useService(ClientConfig);
   const httpClient = useService(HttpClient);
@@ -37,7 +39,12 @@ export default function MeiImportEditor({ content, onContentChanged }) {
   const [isLoadingVoices, setIsLoadingVoices] = useState(false);
   const [isTooLargeForPlayback, setIsTooLargeForPlayback] = useState(false);
 
-  const { sourceUrl, zoom, spacingSystem, measuresPerLine, width, caption, playbackEnabled, highlightedVoice, highlightColor } = content;
+  const { sourceUrl, zoom, spacingSystem, measuresPerLine, width, caption, playbackEnabled, tempo, removeSilence, voiceVolumes = {}, highlightColor } = content;
+  // Content saved before these fields existed doesn't have them yet, so fall back to the same
+  // defaults getDefaultContent() uses for new content - otherwise the controls would show a value
+  // that doesn't match what's actually being played back.
+  const tempoValue = tempo ?? DEFAULT_TEMPO_VALUE;
+  const removeSilenceValue = removeSilence ?? DEFAULT_REMOVE_SILENCE_VALUE;
 
   useEffect(() => {
     setIsFileTooLarge(false);
@@ -144,26 +151,37 @@ export default function MeiImportEditor({ content, onContentChanged }) {
     triggerContentChanged({ playbackEnabled: newValue });
   };
 
-  const handleHighlightedVoiceChange = newValue => {
-    triggerContentChanged({ highlightedVoice: newValue });
+  const handleTempoChange = newValue => {
+    triggerContentChanged({ tempo: newValue });
+  };
+
+  const handleRemoveSilenceChange = newValue => {
+    triggerContentChanged({ removeSilence: newValue });
+  };
+
+  const handleVoiceVolumesChange = newTrackVolumes => {
+    const newVoiceVolumes = {};
+    voices.forEach((voice, index) => {
+      newVoiceVolumes[voice.key] = newTrackVolumes[index];
+    });
+    triggerContentChanged({ voiceVolumes: newVoiceVolumes });
   };
 
   const handleHighlightColorChange = color => {
     triggerContentChanged({ highlightColor: color.toHexString() });
   };
 
-  const voiceSelectOptions = [
-    { value: '', label: t('noVoiceHighlighted') },
-    ...voices.map(voice => ({
-      value: voice.key,
-      label: voice.label || t('voiceFallbackLabel', { staffN: voice.staffN, layerN: voice.layerN })
-    }))
-  ];
+  const voiceMixerTracks = voices.map((voice, index) => ({
+    key: voice.key,
+    name: voice.label || t('voiceFallbackLabel', { voiceNumber: index + 1 })
+  }));
+
+  const voiceMixerVolumes = voices.map(voice => voiceVolumes[voice.key] ?? DEFAULT_VOICE_VOLUME_VALUE);
 
   const allowedSourceTypes = ensureAreExcluded(Object.values(SOURCE_TYPE), [SOURCE_TYPE.youtube, SOURCE_TYPE.wikimedia]);
 
   return (
-    <div className="EP_Musikisum_MeiImport_Editor">
+    <div className="EP_Musikisum_MeiStudio_Editor">
       <Form layout="horizontal" labelAlign="left">
         <FormItem {...FORM_ITEM_LAYOUT} label={t('common:url')}>
           <UrlInput value={sourceUrl} onChange={handleSourceUrlChange} allowedSourceTypes={allowedSourceTypes} />
@@ -232,15 +250,36 @@ export default function MeiImportEditor({ content, onContentChanged }) {
           </FormItem>
         )}
         {!!playbackEnabled && (
+          <Form.Item label={<Info tooltip={t('tempoInfo')}>{t('tempo')}</Info>} {...FORM_ITEM_LAYOUT}>
+            <StepSlider
+              step={0.05}
+              value={tempoValue}
+              marksStep={0.2}
+              labelsStep={1}
+              min={MIN_TEMPO_VALUE}
+              max={MAX_TEMPO_VALUE}
+              onChange={handleTempoChange}
+              formatter={percentageFormatter}
+              />
+          </Form.Item>
+        )}
+        {!!playbackEnabled && (
+          <Form.Item label={<Info tooltip={t('removeSilenceInfo')}>{t('removeSilence')}</Info>} {...FORM_ITEM_LAYOUT}>
+            <Switch checked={removeSilenceValue} onChange={handleRemoveSilenceChange} />
+          </Form.Item>
+        )}
+        {!!playbackEnabled && !isLoadingVoices && !!voiceMixerTracks.length && (
           <Form.Item
-            label={<Info tooltip={t('highlightedVoiceInfo')}>{t('highlightedVoice')}</Info>}
+            label={<Info tooltip={t('voiceVolumesInfo')}>{t('voiceVolumes')}</Info>}
             {...FORM_ITEM_LAYOUT}
             >
-            <Select
-              value={highlightedVoice}
-              onChange={handleHighlightedVoiceChange}
-              loading={isLoadingVoices}
-              options={voiceSelectOptions}
+            <TrackMixerDisplay
+              tracks={voiceMixerTracks}
+              volumes={voiceMixerVolumes}
+              volumePresets={[]}
+              selectedVolumePresetIndex={0}
+              onVolumesChange={handleVoiceVolumesChange}
+              onSelectedVolumePresetIndexChange={() => {}}
               />
           </Form.Item>
         )}
@@ -254,6 +293,6 @@ export default function MeiImportEditor({ content, onContentChanged }) {
   );
 }
 
-MeiImportEditor.propTypes = {
+MeiStudioEditor.propTypes = {
   ...sectionEditorProps
 };

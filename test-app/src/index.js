@@ -48,7 +48,7 @@ const config = {
   emailSenderAddress: process.env.TEST_APP_EMAIL_SENDER_ADDRESS,
   adminEmailAddress: process.env.TEST_APP_ADMIN_EMAIL_ADDRESS,
   initialUser: JSON.parse(process.env.TEST_APP_INITIAL_USER),
-  plugins: ['markdown', 'image', 'musikisum/educandu-plugin-mei-import'],
+  plugins: ['markdown', 'image', 'musikisum/educandu-plugin-mei-studio'],
   exposeErrorDetails: true
 };
 

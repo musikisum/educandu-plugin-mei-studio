@@ -1,0 +1,58 @@
+.EP_Musikisum_MeiStudio_Display {}
+
+.EP_Musikisum_MeiStudio_Display-caption {
+  margin-top: @edu-page-content-padding;
+}
+
+.EP_Musikisum_MeiStudio_Document {
+  position: relative;
+  // Verovio's SVG has a fixed pixel width, so without this, block/grid/flex ancestors up the tree
+  // (e.g. educandu's own page grid) treat it as non-shrinkable content and refuse to size below
+  // it, blowing up the whole page's width on narrow viewports instead of just wrapping/scrolling
+  // locally here.
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.EP_Musikisum_MeiStudio_Document-resizeHint {
+  margin-bottom: @edu-content-padding;
+}
+
+.EP_Musikisum_MeiStudio_Document-spinner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: fade(@edu-background-color-light, 60%);
+}
+
+.EP_Musikisum_MeiStudio_Document-error {
+  font-style: italic;
+}
+
+.EP_Musikisum_MeiStudio_Document-errorDetails {
+  margin-top: 4px;
+  font-size: 12px;
+  font-style: normal;
+  opacity: 0.65;
+}
+
+.EP_Musikisum_MeiStudio_Playback {}
+
+.EP_Musikisum_MeiStudio_Playback-controls {
+  .m-media-player-no-screen
+}
+
+.EP_Musikisum_MeiStudio_Editor {
+  // antd/rc-slider centers every mark label under its tick (translateX(-50%) as an inline style),
+  // which makes the leftmost/rightmost label hang off the slider's own bounds. Left-/right-align
+  // just those two instead so they stay within the component.
+  .ant-slider-mark-text:first-child {
+    transform: translateX(0) !important;
+  }
+
+  .ant-slider-mark-text:last-child {
+    transform: translateX(-100%) !important;
+  }
+}

@@ -6,10 +6,10 @@ import { getAccessibleUrl, isInternalSourceType } from '@educandu/educandu/utils
 import { useService } from '@educandu/educandu/components/container-context.js';
 import { sectionDisplayProps } from '@educandu/educandu/ui/default-prop-types.js';
 
-export default function MeiImportDisplay({ content }) {
+export default function MeiStudioDisplay({ content }) {
   const clientConfig = useService(ClientConfig);
 
-  const { sourceUrl, zoom, spacingSystem, measuresPerLine, width, caption, playbackEnabled, highlightedVoice, highlightColor } = content;
+  const { sourceUrl, zoom, spacingSystem, measuresPerLine, width, caption, playbackEnabled, tempo, removeSilence, voiceVolumes, highlightColor } = content;
   const actualUrl = sourceUrl
     ? getAccessibleUrl({ url: sourceUrl, cdnRootUrl: clientConfig.cdnRootUrl })
     : null;
@@ -20,8 +20,8 @@ export default function MeiImportDisplay({ content }) {
   const withCredentials = isInternalSourceType({ url: sourceUrl, cdnRootUrl: clientConfig.cdnRootUrl });
 
   return (
-    <div className="EP_Musikisum_MeiImport_Display">
-      <div className={`EP_Musikisum_MeiImport_Display-viewer u-width-${width || 100}`}>
+    <div className="EP_Musikisum_MeiStudio_Display">
+      <div className={`EP_Musikisum_MeiStudio_Display-viewer u-width-${width || 100}`}>
         <MeiDocument
           url={actualUrl}
           withCredentials={withCredentials}
@@ -30,12 +30,14 @@ export default function MeiImportDisplay({ content }) {
           spacingSystem={spacingSystem}
           measuresPerLine={measuresPerLine}
           playbackEnabled={playbackEnabled}
-          highlightedVoice={highlightedVoice}
+          tempo={tempo}
+          removeSilence={removeSilence}
+          voiceVolumes={voiceVolumes}
           highlightColor={highlightColor}
           />
       </div>
       {!!caption && (
-        <div className={`EP_Musikisum_MeiImport_Display-caption u-width-${width || 100}`}>
+        <div className={`EP_Musikisum_MeiStudio_Display-caption u-width-${width || 100}`}>
           <Markdown inline>{caption}</Markdown>
         </div>
       )}
@@ -43,6 +45,6 @@ export default function MeiImportDisplay({ content }) {
   );
 }
 
-MeiImportDisplay.propTypes = {
+MeiStudioDisplay.propTypes = {
   ...sectionDisplayProps
 };

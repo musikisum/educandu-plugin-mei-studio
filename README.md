@@ -1,4 +1,4 @@
-# educandu-plugin-mei-import
+# educandu-plugin-mei-studio
 
 An [educandu](https://github.com/educandu/educandu) plugin to import MEI (Music Encoding Initiative) files and display musical notation.
 
@@ -7,12 +7,12 @@ An [educandu](https://github.com/educandu/educandu) plugin to import MEI (Music 
 * node.js ^20.0.0
 * optional: globally installed gulp: `npm i -g gulp-cli`
 
-The output of this repository is an npm package (`@musikisum/educandu-plugin-mei-import`).
+The output of this repository is an npm package (`@musikisum/educandu-plugin-mei-studio`).
 
 ## Installation
 
 ```sh
-npm install @musikisum/educandu-plugin-mei-import
+npm install @musikisum/educandu-plugin-mei-studio
 ```
 
 ## Usage
@@ -20,30 +20,28 @@ npm install @musikisum/educandu-plugin-mei-import
 Add the plugin info to the application's custom resolvers module:
 
 ```js
-import MeiImportPlugin from '@musikisum/educandu-plugin-mei-import';
+import MeiStudioPlugin from '@musikisum/educandu-plugin-mei-studio';
 
 export default {
   resolveCustomPageTemplate: null,
   resolveCustomHomePageTemplate: null,
   resolveCustomSiteLogo: null,
-  resolveCustomPluginInfos: () => [MeiImportPlugin]
+  resolveCustomPluginInfos: () => [MeiStudioPlugin]
 };
 ```
 
-Add the plugin name, the translations and any additional controllers to your server config:
+Add the plugin name and its translations to your server config (no additional controller is needed - the plugin has no server-side code):
 
 ```js
 import educandu from '@educandu/educandu';
 import { createRequire } from 'node:module';
-import MeiImportController from '@musikisum/educandu-plugin-mei-import/mei-import-controller.js';
 
 const require = createRequire(import.meta.url);
-const meiImportPluginTranslationsPath = require.resolve('@musikisum/educandu-plugin-mei-import/translations.json');
+const meiStudioPluginTranslationsPath = require.resolve('@musikisum/educandu-plugin-mei-studio/translations.json');
 
 educandu({
-  plugins: [/* your other plugins here */, 'musikisum/educandu-plugin-mei-import'],
-  resources: [/* your other translations here */, meiImportPluginTranslationsPath],
-  additionalControllers: [/* your other additional controllers here */, MeiImportController],
+  plugins: [/* your other plugins here */, 'musikisum/educandu-plugin-mei-studio'],
+  resources: [/* your other translations here */, meiStudioPluginTranslationsPath],
   /* your other server config here */
 });
 ```
@@ -55,7 +53,7 @@ Import the plugin styles to your main LESS entry point:
 @import url('@educandu/educandu/styles/main.less');
 
 // Styles for the plugin:
-@import url('@musikisum/educandu-plugin-mei-import/mei-import.less');
+@import url('@musikisum/educandu-plugin-mei-studio/mei-studio.less');
 
 // Other styles here
 ```
@@ -63,8 +61,8 @@ Import the plugin styles to your main LESS entry point:
 ## Development
 
 ```sh
-git clone git@github.com:musikisum/educandu-plugin-mei-import.git
-cd educandu-plugin-mei-import
+git clone git@github.com:musikisum/educandu-plugin-mei-studio.git
+cd educandu-plugin-mei-studio
 yarn install
 npx gulp
 ```

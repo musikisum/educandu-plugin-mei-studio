@@ -1,8 +1,11 @@
 {
-  "name": "@musikisum/educandu-plugin-mei-import",
+  "name": "@musikisum/educandu-plugin-mei-studio",
   "version": "0.0.0",
   "description": "An educandu plugin to import MEI (Music Encoding Initiative) files and display musical notation",
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": "./dist/index.js",
     "./*": "./dist/*"
@@ -15,10 +18,13 @@
   ],
   "license": "MIT",
   "author": "Educandu Team <team@educandu.dev>",
-  "homepage": "https://github.com/musikisum/educandu-plugin-mei-import",
+  "homepage": "https://github.com/musikisum/educandu-plugin-mei-studio",
   "repository": {
     "type": "git",
-    "url": "https://github.com/musikisum/educandu-plugin-mei-import"
+    "url": "https://github.com/musikisum/educandu-plugin-mei-studio"
+  },
+  "scripts": {
+    "postinstall": "node scripts/patch-verovio.mjs"
   },
   "dependencies": {
     "smplr": "^1.0.0",

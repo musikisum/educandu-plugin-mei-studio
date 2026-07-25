@@ -1,12 +1,12 @@
-import MeiImportInfo from './mei-import-info.js';
+import MeiStudioInfo from './mei-studio-info.js';
 import { beforeEach, describe, expect, it } from 'vitest';
 import GithubFlavoredMarkdown from '@educandu/educandu/common/github-flavored-markdown.js';
 
-describe('mei-import-info', () => {
+describe('mei-studio-info', () => {
   let sut;
 
   beforeEach(() => {
-    sut = new MeiImportInfo(new GithubFlavoredMarkdown());
+    sut = new MeiStudioInfo(new GithubFlavoredMarkdown());
   });
 
   describe('redactContent', () => {
