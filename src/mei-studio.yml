@@ -27,8 +27,8 @@ musikisum/educandu-plugin-mei-studio:
     en: Ear training
     de: Gehörbildung
   playbackEnabledInfo:
-    en: Adds an optional audio playback with a piano sound, generated from the notation, plus the ability to set the volume of each voice individually - useful for ear-training exercises with multi-voice pieces. Playback is only loaded once the play button is clicked.
-    de: Fügt eine optionale, aus der Notation erzeugte Audio-Wiedergabe mit Klaviersound hinzu, inklusive der Möglichkeit, die Lautstärke jeder Stimme einzeln einzustellen - nützlich für Gehörbildungsübungen bei mehrstimmigen Stücken. Die Wiedergabe wird erst beim Klick auf den Abspielbutton geladen.
+    en: Adds ear-training tools for multi-voice pieces - setting the volume of each voice individually, highlighting the currently audible voice in the notation, and hiding voices from the notation. Playback itself works regardless of this setting.
+    de: Fügt Gehörbildungswerkzeuge für mehrstimmige Stücke hinzu - die Lautstärke jeder Stimme einzeln einstellen, die gerade hörbare Stimme in der Notation hervorheben, und Stimmen aus der Notation ausblenden. Die Wiedergabe selbst funktioniert unabhängig von dieser Einstellung.
   tempo:
     en: Tempo
     de: Tempo
@@ -42,8 +42,8 @@ musikisum/educandu-plugin-mei-studio:
     en: Shortens unusually long silent gaps in the playback (e.g. a written-out repeat with no notes for the second pass) down to a normal pause. Turn this off if a piece has an intentionally long pause that should be kept.
     de: Kürzt ungewöhnlich lange stille Abschnitte in der Wiedergabe (z. B. bei einer ausgeschriebenen Wiederholung ohne Noten für den zweiten Durchgang) auf eine normale Pause. Ausschalten, wenn ein Stück eine bewusst lange Pause hat, die erhalten bleiben soll.
   voiceVolumes:
-    en: Voice volume
-    de: Stimmlautstärke
+    en: Volume
+    de: Lautstärke
   voiceVolumesInfo:
     en: Sets the volume of each voice for playback. Notes of louder voices are also shown in a stronger highlight color in the notation.
     de: Legt die Lautstärke jeder Stimme für die Wiedergabe fest. Noten lauterer Stimmen werden zudem stärker in der Hervorhebungsfarbe eingefärbt.
@@ -59,3 +59,24 @@ musikisum/educandu-plugin-mei-studio:
   resizeHint:
     en: The browser window was resized. Please reload the page so the notation adjusts to the new size correctly.
     de: Das Browserfenster wurde in der Größe geändert. Bitte die Seite neu laden, damit sich die Notenansicht korrekt anpasst.
+  hiddenVoices:
+    en: Hide
+    de: Ausblenden
+  hiddenVoicesInfo:
+    en: Hides the selected voices from the notation. Playback is not affected - the voices keep sounding, only their notation is hidden.
+    de: Blendet die ausgewählten Stimmen aus der Notenansicht aus. Die Wiedergabe ist davon nicht betroffen - die Stimmen sind weiterhin zu hören, nur die Notation wird ausgeblendet.
+  practiceControls:
+    en: Practice settings
+    de: Übeeinstellungen
+  playbackSettings:
+    en: Playback
+    de: Wiedergabe
+  earTrainingTools:
+    en: Ear training
+    de: Gehörbildung
+  soundEnabledInfo:
+    en: Adds an audio playback with a piano sound, generated from the notation. Turn this off if no playback is wanted for this section.
+    de: Fügt eine aus der Notation erzeugte Audio-Wiedergabe mit Klaviersound hinzu. Ausschalten, wenn für diesen Abschnitt keine Wiedergabe gewünscht ist.
+  practiceControlsRerenderHint:
+    en: Changing any setting here regenerates the audio and restarts playback from the beginning.
+    de: Jede Änderung hier erzeugt die Audiodatei neu und startet die Wiedergabe von vorn.

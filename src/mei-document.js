@@ -7,7 +7,7 @@ import { useIsMounted } from '@educandu/educandu/ui/hooks.js';
 import { applyMeasuresPerLine } from './mei-layout-utils.js';
 import HttpClient from '@educandu/educandu/api-clients/http-client.js';
 import { useService } from '@educandu/educandu/components/container-context.js';
-import { buildVoiceKeyByNoteId, collapseLongSilences } from './mei-voice-utils.js';
+import { applyVoiceStyling, buildNoteOpacitiesById, buildVoiceKeyByNoteId, collapseLongSilences, findVoiceHiddenElementIds } from './mei-voice-utils.js';
 import { DEFAULT_HIGHLIGHT_COLOR_VALUE, DEFAULT_MEASURES_PER_LINE_VALUE, DEFAULT_SPACING_SYSTEM_VALUE, DEFAULT_VOICE_VOLUME_VALUE, MAX_SILENCE_MS } from './constants.js';
 
 // Verovio reports the specific reason a file failed to load (e.g. "No <body> element found in
@@ -45,7 +45,7 @@ function loadVerovioToolkit() {
   return verovioToolkitPromise;
 }
 
-function MeiDocument({ url, withCredentials, zoom, width, spacingSystem, measuresPerLine, playbackEnabled, tempo, removeSilence, voiceVolumes, highlightColor }) {
+function MeiDocument({ url, withCredentials, zoom, width, spacingSystem, measuresPerLine, soundEnabled, playbackEnabled, tempo, removeSilence, voiceVolumes, highlightColor, hiddenVoices }) {
   const divRef = useRef(null);
   const isMounted = useIsMounted();
   const lastLoadedUrl = useRef(null);
@@ -166,14 +166,17 @@ function MeiDocument({ url, withCredentials, zoom, width, spacingSystem, measure
           toolkit.redoLayout();
         }
 
-        // Note events and voice highlighting are derived from the toolkit's *currently loaded*
-        // document, so they can be (re-)computed here regardless of whether this run reloaded
-        // the data or just redid the layout (e.g. playbackEnabled was toggled on for content
-        // that was already loaded).
+        // Note events (and with them, audio playback) only exist while soundEnabled - ear
+        // training (per-voice mixing/highlighting, voice hiding) additionally requires it, since
+        // none of those tools mean anything without audio to begin with. All of this is derived
+        // from the toolkit's *currently loaded* document, so it can be (re-)computed here
+        // regardless of whether this run reloaded the data or just redid the layout.
         let newNoteEvents = [];
         let noteOpacitiesById = null;
-        if (playbackEnabled) {
-          const voiceKeyByNoteId = buildVoiceKeyByNoteId(toolkit.getMEI());
+        let hiddenElementIds = null;
+        if (soundEnabled) {
+          const processedMei = toolkit.getMEI();
+          const voiceKeyByNoteId = buildVoiceKeyByNoteId(processedMei);
 
           // Getting pitch, start time and duration straight from Verovio's own MIDI export
           // (rather than re-deriving them from the raw MEI, e.g. pitch names/accidentals)
@@ -199,26 +202,19 @@ function MeiDocument({ url, withCredentials, zoom, width, spacingSystem, measure
           // doesn't sit through dead air, unless the author wants those gaps kept as-is.
           newNoteEvents = removeSilence ? collapseLongSilences(rawNoteEvents, MAX_SILENCE_MS) : rawNoteEvents;
 
-          noteOpacitiesById = new Map(
-            [...voiceKeyByNoteId].map(([id, voiceKey]) => {
-              const volume = voiceVolumes[voiceKey] ?? DEFAULT_VOICE_VOLUME_VALUE;
-              return [id, Math.min(1, Math.max(0, volume))];
-            })
-          );
+          if (playbackEnabled) {
+            if (hiddenVoices.length) {
+              hiddenElementIds = findVoiceHiddenElementIds(processedMei, voiceKeyByNoteId, hiddenVoices);
+            }
+
+            noteOpacitiesById = buildNoteOpacitiesById(voiceKeyByNoteId, voiceVolumes, DEFAULT_VOICE_VOLUME_VALUE);
+          }
         }
 
         const svg = toolkit.renderToSVG(1);
         if (isMounted.current && divRef.current) {
           divRef.current.innerHTML = svg;
-          if (noteOpacitiesById) {
-            for (const noteGroup of divRef.current.querySelectorAll('.note')) {
-              if (noteOpacitiesById.has(noteGroup.id)) {
-                noteGroup.style.fill = highlightColor;
-                noteGroup.style.stroke = highlightColor;
-                noteGroup.style.opacity = noteOpacitiesById.get(noteGroup.id);
-              }
-            }
-          }
+          applyVoiceStyling(divRef.current, { noteOpacitiesById, highlightColor, hiddenElementIds });
         }
         setNoteEvents(newNoteEvents);
         setHasError(false);
@@ -248,7 +244,7 @@ function MeiDocument({ url, withCredentials, zoom, width, spacingSystem, measure
     return () => {
       isStale = true;
     };
-  }, [url, withCredentials, zoom, width, spacingSystem, measuresPerLine, playbackEnabled, tempo, removeSilence, voiceVolumes, highlightColor, httpClient, isMounted]);
+  }, [url, withCredentials, zoom, width, spacingSystem, measuresPerLine, soundEnabled, playbackEnabled, tempo, removeSilence, voiceVolumes, highlightColor, hiddenVoices, httpClient, isMounted]);
 
   return (
     <div className="EP_Musikisum_MeiStudio_Document">
@@ -276,8 +272,8 @@ function MeiDocument({ url, withCredentials, zoom, width, spacingSystem, measure
         </div>
       )}
       <div ref={divRef} />
-      {!!playbackEnabled && !!noteEvents.length && (
-        <MeiPlayback noteEvents={noteEvents} voiceVolumes={voiceVolumes} />
+      {!!noteEvents.length && (
+        <MeiPlayback noteEvents={noteEvents} voiceVolumes={playbackEnabled ? voiceVolumes : {}} />
       )}
     </div>
   );
@@ -290,11 +286,13 @@ MeiDocument.propTypes = {
   width: PropTypes.number,
   spacingSystem: PropTypes.number,
   measuresPerLine: PropTypes.number,
+  soundEnabled: PropTypes.bool,
   playbackEnabled: PropTypes.bool,
   tempo: PropTypes.number,
   removeSilence: PropTypes.bool,
   voiceVolumes: PropTypes.objectOf(PropTypes.number),
-  highlightColor: PropTypes.string
+  highlightColor: PropTypes.string,
+  hiddenVoices: PropTypes.arrayOf(PropTypes.string)
 };
 
 MeiDocument.defaultProps = {
@@ -304,11 +302,13 @@ MeiDocument.defaultProps = {
   width: 100,
   spacingSystem: DEFAULT_SPACING_SYSTEM_VALUE,
   measuresPerLine: DEFAULT_MEASURES_PER_LINE_VALUE,
+  soundEnabled: true,
   playbackEnabled: false,
   tempo: 1,
   removeSilence: true,
   voiceVolumes: {},
-  highlightColor: DEFAULT_HIGHLIGHT_COLOR_VALUE
+  highlightColor: DEFAULT_HIGHLIGHT_COLOR_VALUE,
+  hiddenVoices: []
 };
 
 export default MeiDocument;

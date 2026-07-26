@@ -46,12 +46,14 @@ class MeiStudioInfo {
       spacingSystem: DEFAULT_SPACING_SYSTEM_VALUE,
       measuresPerLine: DEFAULT_MEASURES_PER_LINE_VALUE,
       width: 100,
-      caption: '',
+      copyrightNotice: '',
+      soundEnabled: true,
       playbackEnabled: false,
       tempo: DEFAULT_TEMPO_VALUE,
       removeSilence: DEFAULT_REMOVE_SILENCE_VALUE,
       voiceVolumes: {},
-      highlightColor: DEFAULT_HIGHLIGHT_COLOR_VALUE
+      highlightColor: DEFAULT_HIGHLIGHT_COLOR_VALUE,
+      hiddenVoices: []
     };
   }
 
@@ -62,12 +64,18 @@ class MeiStudioInfo {
       spacingSystem: joi.number().min(MIN_SPACING_SYSTEM_VALUE).max(MAX_SPACING_SYSTEM_VALUE).required(),
       measuresPerLine: joi.number().integer().min(MIN_MEASURES_PER_LINE_VALUE).max(MAX_MEASURES_PER_LINE_VALUE).required(),
       width: joi.number().min(0).max(100).required(),
-      caption: joi.string().allow('').required(),
+      copyrightNotice: joi.string().allow('').required(),
+      soundEnabled: joi.boolean().required(),
       playbackEnabled: joi.boolean().required(),
       tempo: joi.number().min(MIN_TEMPO_VALUE).max(MAX_TEMPO_VALUE).required(),
       removeSilence: joi.boolean().required(),
       voiceVolumes: joi.object().pattern(joi.string(), joi.number().min(MIN_VOICE_VOLUME_VALUE).max(MAX_VOICE_VOLUME_VALUE)).required(),
-      highlightColor: joi.string().pattern(/^#[0-9a-fA-F]{6}$/).required()
+      highlightColor: joi.string().pattern(/^#[0-9a-fA-F]{6}$/).required(),
+      // Not .required(): content saved before this field was introduced doesn't have it yet, and
+      // with { noDefaults: true } below, joi.default() wouldn't backfill it - every place this is
+      // read already falls back to [] when the field is absent (see mei-document.js,
+      // mei-studio-display.js, mei-studio-editor.js), so validation just has to allow that.
+      hiddenVoices: joi.array().items(joi.string())
     });
 
     joi.attempt(content, schema, { abortEarly: false, convert: false, noDefaults: true });
@@ -80,8 +88,8 @@ class MeiStudioInfo {
   redactContent(content, targetRoomId) {
     const redactedContent = cloneDeep(content);
 
-    redactedContent.caption = this.gfm.redactCdnResources(
-      redactedContent.caption,
+    redactedContent.copyrightNotice = this.gfm.redactCdnResources(
+      redactedContent.copyrightNotice,
       url => couldAccessUrlFromRoom(url, targetRoomId) ? url : ''
     );
 
@@ -95,7 +103,7 @@ class MeiStudioInfo {
   getCdnResources(content) {
     const cdnResources = [];
 
-    cdnResources.push(...this.gfm.extractCdnResources(content.caption));
+    cdnResources.push(...this.gfm.extractCdnResources(content.copyrightNotice));
 
     if (isInternalSourceType({ url: content.sourceUrl })) {
       cdnResources.push(content.sourceUrl);

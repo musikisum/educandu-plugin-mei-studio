@@ -1,6 +1,6 @@
 .EP_Musikisum_MeiStudio_Display {}
 
-.EP_Musikisum_MeiStudio_Display-caption {
+.EP_Musikisum_MeiStudio_Display-copyrightNotice {
   margin-top: @edu-page-content-padding;
 }
 
@@ -44,6 +44,62 @@
   .m-media-player-no-screen
 }
 
+.EP_Musikisum_MeiStudio_PracticeControls {
+  margin-top: @edu-content-padding;
+}
+
+.EP_Musikisum_MeiStudio_PracticeControls-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 100%;
+  padding: 24px 28px;
+  margin-top: 4px;
+  border: 1px solid @edu-border-color-base;
+  border-radius: @edu-border-radius-base;
+}
+
+.EP_Musikisum_MeiStudio_PracticeControls-hint {
+  font-size: 12px;
+  font-style: italic;
+  opacity: 0.65;
+}
+
+.EP_Musikisum_MeiStudio_PracticeControls-group {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.EP_Musikisum_MeiStudio_PracticeControls-groupTitle {
+  font-weight: bold;
+}
+
+.EP_Musikisum_MeiStudio_PracticeControls-columns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 100px;
+}
+
+.EP_Musikisum_MeiStudio_PracticeControls-column {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.EP_Musikisum_MeiStudio_PracticeControls-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.EP_Musikisum_MeiStudio_PracticeControls-row--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
 .EP_Musikisum_MeiStudio_Editor {
   // antd/rc-slider centers every mark label under its tick (translateX(-50%) as an inline style),
   // which makes the leftmost/rightmost label hang off the slider's own bounds. Left-/right-align
@@ -55,4 +111,28 @@
   .ant-slider-mark-text:last-child {
     transform: translateX(-100%) !important;
   }
+}
+
+// Each lives inside a FormItem (label=' ', colon=false) so it inherits the same left offset and
+// inter-item spacing as every labeled Form.Item around it - only the layout *within* that
+// wrapper is custom here, because FORM_ITEM_LAYOUT's wrapper column is wide (fits a full-width
+// slider), which would otherwise leave a large empty gap after small controls (a Checkbox list,
+// a color swatch) instead of sitting right next to their label.
+.EP_Musikisum_MeiStudio_Editor-columns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 100px;
+}
+
+.EP_Musikisum_MeiStudio_Editor-column {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.EP_Musikisum_MeiStudio_Editor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }

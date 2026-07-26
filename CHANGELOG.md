@@ -4,6 +4,302 @@ Entwicklungsnotizen für `musikisum/educandu-plugin-mei-studio`. Nicht auf
 Nutzer:innen ausgerichtet, sondern als Gedächtnisstütze für künftige
 Weiterentwicklung — was wurde gebaut, warum, und welche Fallstricke gab es.
 
+## 2026-07-26 (8) — Vor-Release-Aufräumen: Crash-Sicherheit, Dateigröße, Testabdeckung
+
+Vor dem ersten Versions-Tag noch einmal gezielt durchgesehen (nicht als
+allgemeine Suche, sondern mit der konkreten Frage "kann dieses Plugin die
+ganze Seite lahmlegen").
+
+**Crash-Sicherheit:** Bestätigt, dass die eine Stelle, an der so gut wie
+alles passiert (`mei-document.js`s Lade-Effekt: Verovio, DOM-Manipulation,
+Netzwerk) komplett in try/catch/finally sitzt - jeder synchrone Fehler dort
+landet als `hasError`-Anzeige, nicht als Seitenabsturz (educandu hat wie
+schon früher festgestellt keine Error Boundary). Ein echtes Loch gefunden
+und geschlossen: `mei-studio-editor.js` destrukturierte `voiceVolumes = {}`
+und `hiddenVoices = []` direkt aus `content` - ein Destructuring-Default
+greift aber nur bei `undefined`, nicht bei einem tatsächlich gespeicherten
+`null`. Bei so einem (unwahrscheinlichen, aber durch das Joi-Schema nicht
+ausgeschlossenen) Content-Zustand hätte `voiceVolumes[voice.key]` synchron
+im Render geworfen - kein Try/Catch fängt das im Editor ab. Auf
+`voiceVolumesValue = voiceVolumes || {}` (wie in `mei-studio-display.js`
+schon vorhanden) umgestellt.
+
+**Dateigröße/Duplizierung:** `mei-studio-editor.js` und
+`mei-studio-practice-controls.js` hatten fast wortgleiche Handler
+(`handleVoiceVolumesChange`, `handleHiddenVoiceChange`,
+`handleHighlightColorChange`) und JSX für die Gehörbildungswerkzeuge
+(Ausblenden-Checkboxen, Lautstärke-Mixer, Farbe) - zwei Stellen, die bei
+einer künftigen Änderung leicht hätten auseinanderlaufen können. Extrahiert
+nach `mei-studio-voice-tools.js` (`MeiStudioVoiceTools`): eine
+Komponente, die nur den Inhalt rendert (mit einem `classNamePrefix`-Prop
+für die unterschiedlichen CSS-Klassen), während Editor/Display-Panel
+weiterhin ihre eigene, unterschiedliche Verpackung drumherum bauen
+(FormItem-Grid vs. eigenes Flex-Panel).
+
+**Testabdeckung:** `mei-document.js` (0 % Testabdeckung, weil ein einziger
+großer Effekt) hatte zwei reine Teilstücke, die keinen echten
+Verovio-Toolkit brauchen: die Opazitäts-Berechnung pro Note
+(`buildNoteOpacitiesById`) und das Anwenden von Opazität/Farbe/Ausblenden
+auf das gerenderte SVG (`applyVoiceStyling`) - beide nach
+`mei-voice-utils.js` verschoben, mit Unit-Tests (jsdom). Dabei einen
+kleinen, aber echten Verbesserungspunkt gefunden: `applyVoiceStyling` nutzte
+`container.querySelector('#' + CSS.escape(id))` pro ID - `CSS.escape` ist in
+jsdom nicht vorhanden, der erste Testlauf schlug deshalb fehl. Statt die
+Tests künstlich um das Browser-API herumzubauen, die Implementierung
+robuster gemacht: ein einziger `querySelectorAll('[id]')`-Durchlauf mit
+String-Vergleich statt einer CSS-Selektor-Konstruktion pro ID - schneller
+(ein Durchlauf statt N Abfragen) und unabhängig von `CSS.escape`, das
+ohnehin nur für IDs mit CSS-Sonderzeichen nötig gewesen wäre (bei
+Verovio-generierten IDs nie der Fall).
+
+## 2026-07-26 (7) — Neuer `soundEnabled`-Schalter: Wiedergabe an/aus
+
+Neues Content-Feld `soundEnabled` (Default `true`), ersetzt die reine
+Text-Überschrift "Wiedergabe" durch einen echten Schalter - exakt das
+gleiche Muster wie "Gehörbildung" schon für seinen Abschnitt nutzt (der
+Schalter *ist* die Überschrift, keine zusätzliche Textzeile nötig). Bei
+`soundEnabled = false` verschwinden Tempo, Stille entfernen und die
+Auslastungswarnung aus dem Editor, und die Audio-Erzeugung selbst
+(`noteEvents` in `mei-document.js`) läuft gar nicht erst.
+
+Da Gehörbildungswerkzeuge (Lautstärke-Mixer, Hervorhebung, Stimmen
+ausblenden) ohne Audio ohnehin bedeutungslos wären, sitzt der
+Gehörbildungs-Schalter jetzt selbst *innerhalb* des `soundEnabled`-Blocks -
+Gehörbildung lässt sich also gar nicht erst anschalten, wenn Wiedergabe aus
+ist. Muting einzelner Stimmen bleibt bewusst nur über den bestehenden
+Lautstärke-Regler pro Stimme lösbar (auf 0 stellen) - kein zusätzlicher
+Mechanismus dafür, da das schon vollständig abgedeckt ist.
+
+## 2026-07-26 (6) — Legende durch Copyright-Feld ersetzt; kleine Editor-Aufräumarbeiten
+
+`caption` (freies Markdown-Textfeld, 1:1 aus dem eng verwandten
+`music-xml-viewer`-Plugin übernommen) ersetzt durch `copyrightNotice` -
+Standardmuster aus `image`/`audio`/`video`/`abc-notation`
+(`CopyrightNoticeEditor`/`CopyrightNotice`, unverändert aus dem educandu-Kern
+übernommen): bei einer Datei aus der Medienbibliothek werden Lizenz und
+Kurzbeschreibung automatisch eingetragen, bei YouTube/Wikimedia ein
+Standardtext, bei sonstigen Uploads bleibt es leer. Reiner Feld-Tausch ohne
+Rückwärtskompatibilitäts-Vorkehrung für Altinhalte (auf Wunsch des
+Auftraggebers - das Plugin ist noch nicht produktiv im Einsatz, lokale/Staging-
+Inhalte mit altem `caption`-Feld werden bei Bedarf einfach neu angelegt statt
+migriert).
+
+Außerdem: Überschrift "Gehörbildungswerkzeuge" im Editor entfernt (im Display-
+Übungspanel bleibt sie, dort nicht als überflüssig empfunden) - im Editor
+selbsterklärend, da die Gruppe ohnehin nur erscheint, wenn der
+Gehörbildungs-Schalter gerade eingeschaltet wurde.
+
+## 2026-07-26 (5) — Wiedergabe von Gehörbildung entkoppelt; Editor-Layout-Lehre
+
+### Wiedergabe ist jetzt immer verfügbar, nicht mehr an "Gehörbildung" gebunden
+
+Konzeptionelle Korrektur: Tempo und "Stille entfernen" betreffen die Audio-Wiedergabe
+allgemein (auch sinnvoll, wenn man ein Stück einfach in einem angenehmen Tempo
+anhören will), nicht nur Gehörbildungsübungen. `playbackEnabled` ("Gehörbildung")
+gated jetzt nur noch die eigentlichen Gehörbildungswerkzeuge (Stimmlautstärke-Mixer,
+Hervorhebungsfarbe, Stimmen ausblenden) - die Audio-Erzeugung selbst
+(`noteEvents`/MIDI-Export in `mei-document.js`) läuft jetzt immer, sobald eine Datei
+geladen ist, unabhängig vom Schalter. Bei ausgeschalteter Gehörbildung bekommt
+`MeiPlayback` `voiceVolumes={}` übergeben (alle Stimmen auf volle, gleiche Lautstärke),
+statt eventuell noch gespeicherte Mixer-Werte "unsichtbar" weiterwirken zu lassen,
+während die zugehörige Bedienoberfläche ausgeblendet ist.
+
+Der Content-Feldname `playbackEnabled` musste dafür nicht geändert werden - seine
+Übersetzung war schon immer "Gehörbildung"/"Ear training", was jetzt (enger gefasst)
+sogar noch besser passt als vorher. `playbackEnabledInfo`/`hiddenVoicesInfo` trotzdem
+angepasst, da sie Wiedergabe fälschlich noch als "optional"/"falls aktiviert"
+beschrieben.
+
+Im Editor sitzt "Wiedergabe" (Tempo, Stille entfernen, Auslastungs-Warnung) jetzt vor
+dem Gehörbildung-Schalter, unbedingt sichtbar. Im Display läuft dieselbe Trennung:
+Tempo/Stille entfernen im Übungspanel sind immer da, die
+Gehörbildungswerkzeuge-Gruppe nur bei aktiver Gehörbildung.
+
+Bewusst nicht umgesetzt (nur als Idee genannt, nicht angefragt): ein Schalter, um
+statt generierter Audio-Wiedergabe eine externe Datei (z. B. YouTube-Link) zu
+hinterlegen, ähnlich einem Muster, an das sich der Auftraggeber aus einem anderen
+educandu-Plugin erinnerte (im tatsächlichen `abc-notation`-Plugin allerdings nicht so
+vorgefunden - dort gibt es nur einen einfachen Wiedergabe-An/Aus-Schalter, keine
+Quellenwahl). Würde eine eigene Content-Feld-Erweiterung brauchen (Quelltyp +
+externe URL) und macht den Stimmlautstärke-Mixer bedeutungslos, sobald eine externe
+Datei gewählt ist - beides für eine spätere Sitzung.
+
+### Layout-Lehre: FormItem übernimmt Ausrichtung, eigenes CSS nur für den Feininhalt
+
+Ein zwischenzeitlicher eigener Versuch, die "Ausblenden"/"Lautstärke"/"Farbe"-Zeile
+komplett außerhalb von antds `Form.Item`/`FORM_ITEM_LAYOUT` zu bauen (eigene
+`margin`-Werte für Ausrichtung), lag am linken Rand nicht mehr auf einer Linie mit
+den übrigen, regulären `Form.Item`-Zeilen des Formulars. Zurückgebaut auf: jede
+Gruppe steckt in einem `FormItem` mit `label={' '} colon={false}` (Muster, das im
+Editor für die Warnungs-Alerts schon existierte) - das übernimmt denselben linken
+Versatz und denselben Zeilenabstand wie jedes andere Formularfeld automatisch.
+Die eigenen `-columns`/`-column`/`-row`-Klassen bleiben bestehen, regeln aber nur
+noch das Nebeneinander/den Nicht-Stretch *innerhalb* dieses Wrappers, nicht mehr die
+Positionierung der Gruppe selbst. (Ein zwischenzeitlicher, inzwischen wieder
+entfernter manueller Zwischenstand hatte das Gruppen-`FormItem` versehentlich in ein
+zweites, verschachteltes `<Form>` gepackt statt es direkt ins äußere `Form` zu
+hängen - verschachtelte `<form>`-Elemente sind ungültiges HTML.)
+
+## 2026-07-26 (4) — Korrektur: "Stimmen ausblenden" doch an Gehörbildung gebunden
+
+Rückbau einer eigenmächtigen Erweiterung von mir: "Stimmen ausblenden" wurde
+zunächst so gebaut, dass es *unabhängig* von `playbackEnabled` sichtbar und
+wirksam ist (Begründung damals: auch für reine Lese-/Druckübungen ohne Audio
+nützlich). Das war nie angefragt — das Feature ist ursprünglich als reines
+Gehörbildungswerkzeug entstanden ("hören ohne Noten, Noten einblenden zur
+Kontrolle"), und die "Gehörbildungswerkzeuge"-Überschrift aus der
+vorherigen Sitzung wirkte dadurch widersprüchlich (Abschnitt sichtbar, obwohl
+Gehörbildung aus).
+
+Zurückgebaut auf: Sichtbarkeit *und* Wirkung ausschließlich bei aktivem
+`playbackEnabled` — in allen drei Stellen konsistent:
+- `mei-document.js`: `hiddenElementIds`-Berechnung wieder nur innerhalb des
+  `if (playbackEnabled)`-Zweigs (vorher zusätzlich `|| hiddenVoices.length`
+  als eigener Auslöser).
+- `mei-studio-editor.js`: Stimmenerkennungs-Effekt wieder an `playbackEnabled`
+  gekoppelt (wie vor der letzten Sitzung), Checkboxen nur noch innerhalb des
+  `playbackEnabled`-Blocks gerendert.
+- `mei-studio-display.js` / `mei-studio-practice-controls.js`: dieselbe
+  Kopplung; das Übungspanel rendert jetzt komplett nichts mehr, wenn
+  Gehörbildung aus ist (vorher: Panel blieb für die Stimmen-Ausblenden-Sektion
+  allein sichtbar).
+
+`hiddenVoices` bleibt als Content-Feld/Schema unverändert bestehen (Autor:innen
+können es weiterhin im Editor bei aktiver Gehörbildung setzen) - nur seine
+Sichtbarkeit/Wirkung ist jetzt wieder an die Gehörbildung gebunden.
+
+## 2026-07-26 (3) — Nachbesserungen: Hilfslinien-Grenze, ValidationError, Panel-Layout
+
+**Hilfslinien werden beim Stimmen-Ausblenden nicht mitausgeblendet — bewusste,
+dokumentierte Grenze, keine offene Baustelle.** Empirisch geprüft (Wegwerf-Skript
+gegen `toolkit.renderToSVG()`): `<g class="ledgerLines above/below">` liegt als
+Geschwister-Element von `<g class="layer">` direkt im `<g class="staff">`, nicht
+in einem `.layer` verschachtelt — und bei zwei Stimmen auf einer Notenzeile
+(Divisi, z. B. Sopran+Alt auf einer Zeile) existiert dafür pro Notenzeile/Takt
+**eine gemeinsame** Hilfslinien-Gruppe für beide Stimmen, ohne jede
+Stimmen-Zuordnung im SVG (kein Bezug zu einer bestimmten Note/ID). Eine exakte
+Zuordnung "diese Hilfslinie gehört zu Stimme X" ist aus der SVG-Ausgabe damit
+grundsätzlich nicht ableitbar; ein Versuch über die Position (z. B. "Hilfslinie
+direkt vor einer ausgeblendeten `.layer`-Gruppe ausblenden") wäre eine
+Heuristik, die bei geteilter Nutzung durch beide Stimmen die weiterhin
+sichtbare Stimme mit-ausblenden könnte — genau die Art von instabiler Lösung,
+die hier bewusst vermieden wird. Sauber lösbar nur über einen grundsätzlich
+anderen Ansatz (zweiter, separater Render-Durchlauf aus einer MEI-Kopie ohne
+die ausgeblendete Stimme, getrennt vom für die Wiedergabe genutzten Toolkit-Stand) -
+deutlich größerer Eingriff, aktuell nicht umgesetzt.
+
+**`hiddenVoices` in `validateContent()` von `.required()` auf optional
+umgestellt.** Grund: `joi.attempt(..., { noDefaults: true })` verhindert, dass
+`joi.default([])` greift — ein `.required()`-Feld lässt sich damit nicht
+nachträglich rückwirkend für alten, bereits gespeicherten Content ergänzen.
+Jede Stelle, die `hiddenVoices` liest, hat ohnehin schon einen
+Laufzeit-Fallback auf `[]` (analog zu `voiceVolumes`/`tempo`/`removeSilence`),
+die Schema-Änderung macht die Validierung nur konsistent dazu.
+(Educandu-Core selbst löst neue Pflichtfelder in Bundle-Plugins stattdessen
+über eine umzug-Migration in `node_modules/@educandu/educandu/migrations/`,
+die alte Dokumente in der DB nachträglich befüllt, bei `.required()` im
+Schema bleibend — für dieses Plugin ohne bisherigen Produktiveinsatz
+unverhältnismäßig; die Laufzeit-Fallback-Variante ist hier ausreichend.)
+
+**Übungseinstellungen-Panel:** `Info`-Icons lagen außerhalb des Kastens bzw.
+auf den Reglerlinien — Ursache war nicht zu wenig Padding, sondern dass `Info`
+sein Icon standardmäßig absolut nach links außerhalb der eigenen Komponente
+positioniert (`left: -offset`) und sich auf ein umgebendes
+`.ant-form-item-label`-Padding verlässt, das in diesem Panel (kein antd
+`Form.Item`) gar nicht existiert. Fix: `iconAfterContent`-Prop (vom
+`Info`-Component selbst für genau diesen Fall vorgesehen) statt eigener
+Padding-Vergrößerung. Panel-Padding trotzdem angehoben (mehr Luft insgesamt).
+"Stimmen ausblenden" und "Stimmlautstärke" stehen jetzt in einer gemeinsamen
+Flex-Reihe (`display:flex; flex-wrap:wrap`) nebeneinander und brechen erst bei
+zu wenig Platz automatisch untereinander um — keine feste Breakpoint-Grenze,
+reagiert stufenlos auf die tatsächliche Panel-Breite.
+
+## 2026-07-26 (2) — Stimmen ausblenden, Live-Übungsregler im Display
+
+### Stimmen aus der Notation ausblenden (`hiddenVoices`)
+
+Neues, von der Wiedergabe unabhängiges Feature: eine oder mehrere Stimmen
+lassen sich rein visuell aus der Notenansicht ausblenden, während sie in der
+Audiodatei (falls Gehörbildung aktiv ist) weiterhin erklingen — bewusst
+*nicht* über `voiceVolumes = 0` gelöst, da Lautstärke 0 in `mei-playback.js`
+schon bisher auch `piano.start()` übersprungen hätte (Audio stumm). Stattdessen
+ein eigenes, rein darstellungsbezogenes Feld.
+
+**Wie eine Stimme im gerenderten SVG tatsächlich verschwindet, wurde vorher
+empirisch an beiden Testdateien in `assets/` geprüft** (Skript gegen
+`toolkit.renderToSVG()`, danach verworfen), nicht angenommen:
+
+- Verovio vergibt `<g class="staff">`/`<g class="layer">` **kein** `n`/`data-n`-Attribut
+  im SVG — anders als zunächst erwartet. Wenn die Quelldatei bereits eigene
+  `xml:id`s auf `<staff>`/`<layer>` hatte (z. B. `CRIM_Mass_0001_1.mei`), landen
+  genau diese IDs unverändert im SVG; ohne eigene IDs generiert Verovio ein
+  vorhersagbares `m{Takt}s{Staff}l{Layer}`-Schema. Beides ist nicht
+  verlässlich genug, um eine Stimme direkt über eine ID-Konvention zu finden.
+- Verlässlich ist dagegen `buildVoiceKeyByNoteId()` (liest `toolkit.getMEI()`,
+  bereits für den Lautstärke-Mixer im Einsatz) — jede Note trägt im SVG
+  dieselbe `xml:id` wie im MEI. Von dort aus: `closest('.layer')` auf das
+  SVG-Element der Note liefert zuverlässig genau den Container, der alles zu
+  dieser Stimme/diesem Takt gehörende enthält (auch Balken/`beam`, die
+  Verovio als Geschwister-Element *um* die zugehörigen Noten herum im
+  `.layer` platziert, nicht als Kind einer einzelnen Note — nur die Note
+  ausblenden hätte einen frei schwebenden Balken hinterlassen).
+- Bindebögen/Legatobögen (`<tie>`/`<slur>`) liegen dagegen **außerhalb** jedes
+  `.layer`-Elements, direkt als Kind von `<measure>` — `closest('.layer')`
+  greift für sie ins Leere. Gelöst über den eigenen `startid` des
+  Tie/Slur-Elements (aufgelöst gegen `voiceKeyByNoteId`), das Verovio in
+  `getMEI()` *immer* bereitstellt, auch wenn die Quelldatei das kürzere
+  `@tie="i/m/t"`-Attribut auf `<note>` statt eines expliziten `<tie>`-Elements
+  verwendet hat (empirisch verifiziert: Verovio normalisiert das beim
+  Rundtrip durch `getMEI()` auf ein vollständiges `<tie startid endid>`).
+- Neue Funktion `findVoiceHiddenElementIds()` in `mei-voice-utils.js`
+  kapselt genau das: liefert Note-IDs (→ Aufrufer blendet den
+  `.layer`-Vorfahren aus) und Tie/Slur-IDs (→ Aufrufer blendet das Element
+  direkt aus) für die gewählten Stimmen. Auf beiden Testdateien exakt
+  gegengeprüft: Anzahl ausgeblendeter Noten entspricht exakt der Anzahl an
+  Noten, die laut `voiceKeyByNoteId` zur ausgeblendeten Stimme gehören.
+- Editor: Checkboxen pro erkannter Stimme, unabhängig vom
+  Gehörbildungsschalter sichtbar (dafür musste die Stimmenerkennung in
+  `mei-studio-editor.js` von `playbackEnabled` entkoppelt werden — sie lief
+  vorher nur, wenn Wiedergabe aktiv war).
+
+### Live-Übungsregler im Display (`mei-studio-practice-controls.js`)
+
+Tempo, Stille entfernen, Stimmlautstärke, Hervorhebungsfarbe und
+Stimmen-Ausblenden sind jetzt auch direkt im Display bedienbar (Zahnrad-Button
+unter der Notation), nicht mehr nur im Editor. Bewusst **nicht** in den
+Content geschrieben — reiner `useState` in `mei-studio-display.js`, aus den
+Content-Werten vorbelegt, nach einem Seiten-Reload wieder auf dem
+gespeicherten Autor:innen-Stand. Die Datei-Auswahl (`sourceUrl`) bleibt davon
+komplett unberührt und bewusst nur im Editor änderbar.
+
+Technisch überraschend wenig Neuland nötig: `MeiDocument` berechnet
+`noteEvents` bereits reaktiv aus `tempo`/`removeSilence`/`voiceVolumes`
+(Props im Dependency-Array des Lade-Effekts), und `MeiPlayback` rendert die
+Wiedergabe-WAV bereits neu, sobald sich `noteEvents`/`voiceVolumes` ändern
+(sobald einmal auf Play gedrückt wurde) — die Live-Reaktivität von Audio auf
+Regler-Änderungen im Display war also schon vorhanden, nur nie an
+Display-seitige Regler angeschlossen. Die Regler selbst sind nur sichtbar,
+wenn `content.playbackEnabled` (Gehörbildung) an ist — die
+Stimmen-Ausblenden-Checkboxen dagegen immer, wenn Stimmen erkannt wurden
+(unabhängig von der Wiedergabe, analog zum Editor).
+
+**Bewusst nicht gelöst / offen für eine kommende Sitzung:**
+- Bei einer Regler-Änderung während des Abspielens wird die neue
+  Wiedergabe-URL an `MediaPlayer` durchgereicht, was die Abspielposition
+  vermutlich auf 0 zurücksetzt (nicht im Browser verifiziert) — für ein
+  nahtloses Weiterhören müsste man die Position vorher merken und nach dem
+  Neu-Rendern zurückspulen.
+- Kein Debouncing beim Ziehen an Tempo-/Lautstärke-Reglern — jede
+  Zwischenposition löst potenziell ein Neu-Rendern der Audiodatei aus
+  (Piano-Samples laden, Offline-Rendering). Für die meisten Stücke unter
+  `MAX_NOTE_COUNT_FOR_PLAYBACK` vermutlich unproblematisch, bei größeren
+  Stücken ggf. spürbar — noch nicht im Browser gemessen.
+- Noch nicht im Browser getestet (nur Unit-Tests, Lint, Build/Bundling via
+  esbuild und ein eigenständiges Verifikationsskript gegen Verovios
+  SVG-Ausgabe liefen grün) — vor dem nächsten Staging-Deploy einmal
+  durchklicken: Stimme im Editor dauerhaft ausblenden, im Display zusätzlich
+  live ein-/ausblenden, Tempo/Lautstärke während der Wiedergabe ändern.
+
 ## 2026-07-26 — v1.0.1: Postinstall-Patch fehlte im npm-Paket
 
 **Bug (in v1.0.0):** In oma-web schlug `yarn add` mit

@@ -1,28 +1,28 @@
-import { Alert, ColorPicker, Form, Switch } from 'antd';
+import { Alert, Form, Switch } from 'antd';
 import { countNotes, extractVoices } from './mei-voice-utils.js';
 import { useTranslation } from 'react-i18next';
 import Info from '@educandu/educandu/components/info.js';
 import UrlInput from '@educandu/educandu/components/url-input.js';
 import StepSlider from '@educandu/educandu/components/step-slider.js';
 import { useIsMounted } from '@educandu/educandu/ui/hooks.js';
-import React, { useEffect, useState } from 'react';
+import React, { Fragment, useEffect, useState } from 'react';
 import HttpClient from '@educandu/educandu/api-clients/http-client.js';
+import MeiStudioVoiceTools from './mei-studio-voice-tools.js';
 import {
   MAX_ZOOM_VALUE, MIN_ZOOM_VALUE,
   MAX_SPACING_SYSTEM_VALUE, MIN_SPACING_SYSTEM_VALUE,
   MAX_MEASURES_PER_LINE_VALUE, MIN_MEASURES_PER_LINE_VALUE,
   LARGE_FILE_SIZE_WARNING_THRESHOLD_IN_BYTES,
-  MAX_NOTE_COUNT_FOR_PLAYBACK, DEFAULT_VOICE_VOLUME_VALUE,
+  MAX_NOTE_COUNT_FOR_PLAYBACK,
   MAX_TEMPO_VALUE, MIN_TEMPO_VALUE, DEFAULT_TEMPO_VALUE, DEFAULT_REMOVE_SILENCE_VALUE
 } from './constants.js';
-import MarkdownInput from '@educandu/educandu/components/markdown-input.js';
+import CopyrightNoticeEditor from '@educandu/educandu/components/copyright-notice-editor.js';
 import ClientConfig from '@educandu/educandu/bootstrap/client-config.js';
 import { ensureAreExcluded } from '@educandu/educandu/utils/array-utils.js';
 import { sectionEditorProps } from '@educandu/educandu/ui/default-prop-types.js';
 import ObjectWidthSlider from '@educandu/educandu/components/object-width-slider.js';
 import { useService } from '@educandu/educandu/components/container-context.js';
 import { usePercentageFormat } from '@educandu/educandu/components/locale-context.js';
-import TrackMixerDisplay from '@educandu/educandu/components/media-player/track-mixer-display.js';
 import { FORM_ITEM_LAYOUT, SOURCE_TYPE } from '@educandu/educandu/domain/constants.js';
 import { getAccessibleUrl, isInternalSourceType } from '@educandu/educandu/utils/source-utils.js';
 
@@ -39,12 +39,16 @@ export default function MeiStudioEditor({ content, onContentChanged }) {
   const [isLoadingVoices, setIsLoadingVoices] = useState(false);
   const [isTooLargeForPlayback, setIsTooLargeForPlayback] = useState(false);
 
-  const { sourceUrl, zoom, spacingSystem, measuresPerLine, width, caption, playbackEnabled, tempo, removeSilence, voiceVolumes = {}, highlightColor } = content;
+  const { sourceUrl, zoom, spacingSystem, measuresPerLine, width, copyrightNotice, soundEnabled, playbackEnabled, tempo, removeSilence, voiceVolumes, highlightColor, hiddenVoices } = content;
   // Content saved before these fields existed doesn't have them yet, so fall back to the same
   // defaults getDefaultContent() uses for new content - otherwise the controls would show a value
-  // that doesn't match what's actually being played back.
+  // that doesn't match what's actually being played back. `||`/`??` rather than a destructuring
+  // default: a destructuring default only kicks in for `undefined`, not a stored `null`.
+  const soundEnabledValue = soundEnabled ?? true;
   const tempoValue = tempo ?? DEFAULT_TEMPO_VALUE;
   const removeSilenceValue = removeSilence ?? DEFAULT_REMOVE_SILENCE_VALUE;
+  const voiceVolumesValue = voiceVolumes || {};
+  const hiddenVoicesValue = hiddenVoices || [];
 
   useEffect(() => {
     setIsFileTooLarge(false);
@@ -80,11 +84,17 @@ export default function MeiStudioEditor({ content, onContentChanged }) {
     return () => abortController.abort();
   }, [sourceUrl, clientConfig, isMounted]);
 
+  // isTooLargeForPlayback needs this regardless of playbackEnabled - audio playback itself is a
+  // general feature (see mei-document.js), not an ear-training-only one, so it only depends on
+  // soundEnabled. voices is used further down only for the ear-training tools (hide-voice
+  // checkboxes, volume mixer), which stay gated behind playbackEnabled - fetching it here
+  // regardless just means it goes unused in that case, which is cheap (a client-side XML parse)
+  // compared to what MeiDocument itself already does for audio generation while sound is on.
   useEffect(() => {
     setVoices([]);
     setIsTooLargeForPlayback(false);
 
-    if (!playbackEnabled || !sourceUrl) {
+    if (!soundEnabledValue || !sourceUrl) {
       return () => {};
     }
 
@@ -115,7 +125,7 @@ export default function MeiStudioEditor({ content, onContentChanged }) {
     })();
 
     return () => abortController.abort();
-  }, [playbackEnabled, sourceUrl, clientConfig, httpClient, isMounted]);
+  }, [soundEnabledValue, sourceUrl, clientConfig, httpClient, isMounted]);
 
   const triggerContentChanged = newContentValues => {
     onContentChanged({ ...content, ...newContentValues });
@@ -143,8 +153,12 @@ export default function MeiStudioEditor({ content, onContentChanged }) {
     triggerContentChanged({ width: newValue });
   };
 
-  const handleCaptionChange = event => {
-    triggerContentChanged({ caption: event.target.value });
+  const handleCopyrightNoticeChange = value => {
+    triggerContentChanged({ copyrightNotice: value });
+  };
+
+  const handleSoundEnabledChange = newValue => {
+    triggerContentChanged({ soundEnabled: newValue });
   };
 
   const handlePlaybackEnabledChange = newValue => {
@@ -159,24 +173,17 @@ export default function MeiStudioEditor({ content, onContentChanged }) {
     triggerContentChanged({ removeSilence: newValue });
   };
 
-  const handleVoiceVolumesChange = newTrackVolumes => {
-    const newVoiceVolumes = {};
-    voices.forEach((voice, index) => {
-      newVoiceVolumes[voice.key] = newTrackVolumes[index];
-    });
+  const handleVoiceVolumesChange = newVoiceVolumes => {
     triggerContentChanged({ voiceVolumes: newVoiceVolumes });
   };
 
-  const handleHighlightColorChange = color => {
-    triggerContentChanged({ highlightColor: color.toHexString() });
+  const handleHighlightColorChange = hexColor => {
+    triggerContentChanged({ highlightColor: hexColor });
   };
 
-  const voiceMixerTracks = voices.map((voice, index) => ({
-    key: voice.key,
-    name: voice.label || t('voiceFallbackLabel', { voiceNumber: index + 1 })
-  }));
-
-  const voiceMixerVolumes = voices.map(voice => voiceVolumes[voice.key] ?? DEFAULT_VOICE_VOLUME_VALUE);
+  const handleHiddenVoicesChange = newHiddenVoices => {
+    triggerContentChanged({ hiddenVoices: newHiddenVoices });
+  };
 
   const allowedSourceTypes = ensureAreExcluded(Object.values(SOURCE_TYPE), [SOURCE_TYPE.youtube, SOURCE_TYPE.wikimedia]);
 
@@ -191,8 +198,8 @@ export default function MeiStudioEditor({ content, onContentChanged }) {
             <Alert type="warning" showIcon message={t('largeFileWarning')} />
           </FormItem>
         )}
-        <Form.Item label={t('common:caption')} {...FORM_ITEM_LAYOUT}>
-          <MarkdownInput inline value={caption} onChange={handleCaptionChange} />
+        <Form.Item label={t('common:copyrightNotice')} {...FORM_ITEM_LAYOUT}>
+          <CopyrightNoticeEditor value={copyrightNotice} sourceUrl={sourceUrl} onChange={handleCopyrightNoticeChange} />
         </Form.Item>
         <Form.Item label={t('zoom')} {...FORM_ITEM_LAYOUT}>
           <StepSlider
@@ -239,54 +246,54 @@ export default function MeiStudioEditor({ content, onContentChanged }) {
           <ObjectWidthSlider value={width} onChange={handleWidthChange} />
         </Form.Item>
         <Form.Item
-          label={<Info tooltip={t('playbackEnabledInfo')}>{t('playbackEnabled')}</Info>}
+          label={<Info tooltip={t('soundEnabledInfo')}>{t('playbackSettings')}</Info>}
           {...FORM_ITEM_LAYOUT}
           >
-          <Switch checked={playbackEnabled} onChange={handlePlaybackEnabledChange} />
+          <Switch checked={soundEnabledValue} onChange={handleSoundEnabledChange} />
         </Form.Item>
-        {!!playbackEnabled && !!isTooLargeForPlayback && (
-          <FormItem {...FORM_ITEM_LAYOUT} label={' '} colon={false}>
-            <Alert type="warning" showIcon message={t('playbackTooLargeWarning')} />
-          </FormItem>
-        )}
-        {!!playbackEnabled && (
-          <Form.Item label={<Info tooltip={t('tempoInfo')}>{t('tempo')}</Info>} {...FORM_ITEM_LAYOUT}>
-            <StepSlider
-              step={0.05}
-              value={tempoValue}
-              marksStep={0.2}
-              labelsStep={1}
-              min={MIN_TEMPO_VALUE}
-              max={MAX_TEMPO_VALUE}
-              onChange={handleTempoChange}
-              formatter={percentageFormatter}
-              />
-          </Form.Item>
-        )}
-        {!!playbackEnabled && (
-          <Form.Item label={<Info tooltip={t('removeSilenceInfo')}>{t('removeSilence')}</Info>} {...FORM_ITEM_LAYOUT}>
-            <Switch checked={removeSilenceValue} onChange={handleRemoveSilenceChange} />
-          </Form.Item>
-        )}
-        {!!playbackEnabled && !isLoadingVoices && !!voiceMixerTracks.length && (
-          <Form.Item
-            label={<Info tooltip={t('voiceVolumesInfo')}>{t('voiceVolumes')}</Info>}
-            {...FORM_ITEM_LAYOUT}
-            >
-            <TrackMixerDisplay
-              tracks={voiceMixerTracks}
-              volumes={voiceMixerVolumes}
-              volumePresets={[]}
-              selectedVolumePresetIndex={0}
-              onVolumesChange={handleVoiceVolumesChange}
-              onSelectedVolumePresetIndexChange={() => {}}
-              />
-          </Form.Item>
-        )}
-        {!!playbackEnabled && (
-          <Form.Item label={t('highlightColor')} {...FORM_ITEM_LAYOUT}>
-            <ColorPicker value={highlightColor} onChange={handleHighlightColorChange} disabledAlpha />
-          </Form.Item>
+        {!!soundEnabledValue && (
+          <Fragment>
+            <Form.Item label={<Info tooltip={t('tempoInfo')}>{t('tempo')}</Info>} {...FORM_ITEM_LAYOUT}>
+              <StepSlider
+                step={0.05}
+                value={tempoValue}
+                marksStep={0.2}
+                labelsStep={1}
+                min={MIN_TEMPO_VALUE}
+                max={MAX_TEMPO_VALUE}
+                onChange={handleTempoChange}
+                formatter={percentageFormatter}
+                />
+            </Form.Item>
+            <Form.Item label={<Info tooltip={t('removeSilenceInfo')}>{t('removeSilence')}</Info>} {...FORM_ITEM_LAYOUT}>
+              <Switch checked={removeSilenceValue} onChange={handleRemoveSilenceChange} />
+            </Form.Item>
+            {!!isTooLargeForPlayback && (
+              <FormItem {...FORM_ITEM_LAYOUT} label={' '} colon={false}>
+                <Alert type="warning" showIcon message={t('playbackTooLargeWarning')} />
+              </FormItem>
+            )}
+            <Form.Item
+              label={<Info tooltip={t('playbackEnabledInfo')}>{t('playbackEnabled')}</Info>}
+              {...FORM_ITEM_LAYOUT}
+              >
+              <Switch checked={playbackEnabled} onChange={handlePlaybackEnabledChange} />
+            </Form.Item>
+            {!!playbackEnabled && !isLoadingVoices && !!voices.length && (
+              <FormItem {...FORM_ITEM_LAYOUT} label={' '} colon={false}>
+                <MeiStudioVoiceTools
+                  classNamePrefix="EP_Musikisum_MeiStudio_Editor"
+                  voices={voices}
+                  hiddenVoices={hiddenVoicesValue}
+                  voiceVolumes={voiceVolumesValue}
+                  highlightColor={highlightColor}
+                  onHiddenVoicesChange={handleHiddenVoicesChange}
+                  onVoiceVolumesChange={handleVoiceVolumesChange}
+                  onHighlightColorChange={handleHighlightColorChange}
+                  />
+              </FormItem>
+            )}
+          </Fragment>
         )}
       </Form>
     </div>

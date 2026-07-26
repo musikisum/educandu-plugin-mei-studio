@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { buildVoiceKeyByNoteId, collapseLongSilences, countNotes, extractVoices } from './mei-voice-utils.js';
+import { applyVoiceStyling, buildNoteOpacitiesById, buildVoiceKeyByNoteId, collapseLongSilences, countNotes, extractVoices, findVoiceHiddenElementIds } from './mei-voice-utils.js';
 
 const MEI_NAMESPACE = 'http://www.music-encoding.org/ns/mei';
 
@@ -75,6 +75,128 @@ describe('buildVoiceKeyByNoteId', () => {
     expect(voiceKeyByNoteId.get('s1')).toBe('1-1');
     expect(voiceKeyByNoteId.get('a1')).toBe('1-2');
     expect(voiceKeyByNoteId.get('t1')).toBe('2-1');
+  });
+});
+
+describe('findVoiceHiddenElementIds', () => {
+  const MEI_WITH_TIE_AND_SLUR = `<?xml version="1.0" encoding="UTF-8"?>
+<mei xmlns="${MEI_NAMESPACE}">
+  <music><body><mdiv><score>
+    <section>
+      <measure n="1">
+        <staff n="1">
+          <layer n="1"><note xml:id="s1" pname="c" oct="5" dur="4"/></layer>
+          <layer n="2"><note xml:id="a1" pname="e" oct="4" dur="4"/></layer>
+        </staff>
+        <tie xml:id="tie1" startid="#s1" endid="#s2"/>
+        <slur xml:id="slur1" startid="#a1" endid="#a2"/>
+      </measure>
+      <measure n="2">
+        <staff n="1">
+          <layer n="1"><note xml:id="s2" pname="c" oct="5" dur="4"/></layer>
+          <layer n="2"><note xml:id="a2" pname="e" oct="4" dur="4"/></layer>
+        </staff>
+      </measure>
+    </section>
+  </score></mdiv></body></music>
+</mei>`;
+
+  it('returns an empty set when no voice is hidden', () => {
+    const voiceKeyByNoteId = buildVoiceKeyByNoteId(MEI_WITH_TIE_AND_SLUR);
+    expect(findVoiceHiddenElementIds(MEI_WITH_TIE_AND_SLUR, voiceKeyByNoteId, [])).toStrictEqual(new Set());
+  });
+
+  it('returns the note ids of the hidden voice', () => {
+    const voiceKeyByNoteId = buildVoiceKeyByNoteId(MEI_WITH_TIE_AND_SLUR);
+    const ids = findVoiceHiddenElementIds(MEI_WITH_TIE_AND_SLUR, voiceKeyByNoteId, ['1-1']);
+    expect(ids.has('s1')).toBe(true);
+    expect(ids.has('s2')).toBe(true);
+    expect(ids.has('a1')).toBe(false);
+    expect(ids.has('a2')).toBe(false);
+  });
+
+  it('resolves a tie/slur to its starting note\'s voice and includes its own id when hidden', () => {
+    const voiceKeyByNoteId = buildVoiceKeyByNoteId(MEI_WITH_TIE_AND_SLUR);
+    const idsForVoice1 = findVoiceHiddenElementIds(MEI_WITH_TIE_AND_SLUR, voiceKeyByNoteId, ['1-1']);
+    expect(idsForVoice1.has('tie1')).toBe(true);
+    expect(idsForVoice1.has('slur1')).toBe(false);
+
+    const idsForVoice2 = findVoiceHiddenElementIds(MEI_WITH_TIE_AND_SLUR, voiceKeyByNoteId, ['1-2']);
+    expect(idsForVoice2.has('slur1')).toBe(true);
+    expect(idsForVoice2.has('tie1')).toBe(false);
+  });
+
+  it('hides both voices when both are given', () => {
+    const voiceKeyByNoteId = buildVoiceKeyByNoteId(MEI_WITH_TIE_AND_SLUR);
+    const ids = findVoiceHiddenElementIds(MEI_WITH_TIE_AND_SLUR, voiceKeyByNoteId, ['1-1', '1-2']);
+    expect(ids).toStrictEqual(new Set(['s1', 's2', 'a1', 'a2', 'tie1', 'slur1']));
+  });
+});
+
+describe('buildNoteOpacitiesById', () => {
+  it('maps each note id to its voice volume, clamped to [0, 1]', () => {
+    const voiceKeyByNoteId = new Map([['n1', '1-1'], ['n2', '1-2'], ['n3', '2-1']]);
+    const voiceVolumes = { '1-1': 0.5, '1-2': -3, '2-1': 7 };
+    const result = buildNoteOpacitiesById(voiceKeyByNoteId, voiceVolumes, 1);
+    expect(result.get('n1')).toBe(0.5);
+    expect(result.get('n2')).toBe(0);
+    expect(result.get('n3')).toBe(1);
+  });
+
+  it('falls back to the default volume for a voice missing from voiceVolumes', () => {
+    const voiceKeyByNoteId = new Map([['n1', '1-1']]);
+    const result = buildNoteOpacitiesById(voiceKeyByNoteId, {}, 0.75);
+    expect(result.get('n1')).toBe(0.75);
+  });
+});
+
+describe('applyVoiceStyling', () => {
+  // @vitest-environment jsdom is set for the whole file, so plain DOM APIs (not real SVG
+  // namespacing) are enough here - class/id selectors don't care about the SVG namespace.
+  function createContainer(html) {
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    return container;
+  }
+
+  it('does nothing when neither noteOpacitiesById nor hiddenElementIds are given', () => {
+    const container = createContainer('<g id="n1" class="note"></g>');
+    expect(() => applyVoiceStyling(container, {})).not.toThrow();
+    expect(container.querySelector('#n1').style.opacity).toBe('');
+  });
+
+  it('sets fill/stroke/opacity on notes present in noteOpacitiesById, leaves others untouched', () => {
+    const container = createContainer(`
+      <g id="n1" class="note"></g>
+      <g id="n2" class="note"></g>
+    `);
+    const noteOpacitiesById = new Map([['n1', 0.3]]);
+    applyVoiceStyling(container, { noteOpacitiesById, highlightColor: '#ff0000' });
+    expect(container.querySelector('#n1').style.opacity).toBe('0.3');
+    expect(container.querySelector('#n1').style.fill).toBe('#ff0000');
+    expect(container.querySelector('#n2').style.opacity).toBe('');
+  });
+
+  it('hides the closest .layer ancestor of a hidden note instead of just the note', () => {
+    const container = createContainer(`
+      <g class="layer">
+        <g id="n1" class="note"></g>
+        <g class="beam"><g id="n2" class="note"></g></g>
+      </g>
+    `);
+    applyVoiceStyling(container, { hiddenElementIds: new Set(['n1']) });
+    expect(container.querySelector('.layer').style.display).toBe('none');
+  });
+
+  it('hides a connector id (tie/slur) directly when it has no .layer ancestor', () => {
+    const container = createContainer('<g id="tie1" class="tie"></g>');
+    applyVoiceStyling(container, { hiddenElementIds: new Set(['tie1']) });
+    expect(container.querySelector('#tie1').style.display).toBe('none');
+  });
+
+  it('ignores hidden ids that have no matching element', () => {
+    const container = createContainer('<g id="n1" class="note"></g>');
+    expect(() => applyVoiceStyling(container, { hiddenElementIds: new Set(['does-not-exist']) })).not.toThrow();
   });
 });
 

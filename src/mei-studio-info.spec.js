@@ -10,67 +10,67 @@ describe('mei-studio-info', () => {
   });
 
   describe('redactContent', () => {
-    it('redacts room-media resources from the caption from different rooms', () => {
+    it('redacts room-media resources from the copyright notice from different rooms', () => {
       const result = sut.redactContent({
         sourceUrl: '',
-        caption: '![Some image](cdn://room-media/63cHjt3BAhGnNxzJGrTsN1/some-image.png)'
+        copyrightNotice: '![Some image](cdn://room-media/63cHjt3BAhGnNxzJGrTsN1/some-image.png)'
       }, 'rebhjf4MLq7yjeoCnYfn7E');
       expect(result).toStrictEqual({
         sourceUrl: '',
-        caption: '![Some image]()'
+        copyrightNotice: '![Some image]()'
       });
     });
 
-    it('leaves room-media resources in the caption from the same room intact', () => {
+    it('leaves room-media resources in the copyright notice from the same room intact', () => {
       const result = sut.redactContent({
         sourceUrl: '',
-        caption: '![Some image](cdn://room-media/63cHjt3BAhGnNxzJGrTsN1/some-image.png)'
+        copyrightNotice: '![Some image](cdn://room-media/63cHjt3BAhGnNxzJGrTsN1/some-image.png)'
       }, '63cHjt3BAhGnNxzJGrTsN1');
       expect(result).toStrictEqual({
         sourceUrl: '',
-        caption: '![Some image](cdn://room-media/63cHjt3BAhGnNxzJGrTsN1/some-image.png)'
+        copyrightNotice: '![Some image](cdn://room-media/63cHjt3BAhGnNxzJGrTsN1/some-image.png)'
       });
     });
 
-    it('leaves non room-media resources in the caption intact', () => {
+    it('leaves non room-media resources in the copyright notice intact', () => {
       const result = sut.redactContent({
         sourceUrl: '',
-        caption: '![Some image](cdn://media-library/JgTaqob5vqosBiHsZZoh1/some-image.png)'
+        copyrightNotice: '![Some image](cdn://media-library/JgTaqob5vqosBiHsZZoh1/some-image.png)'
       }, 'rebhjf4MLq7yjeoCnYfn7E');
       expect(result).toStrictEqual({
         sourceUrl: '',
-        caption: '![Some image](cdn://media-library/JgTaqob5vqosBiHsZZoh1/some-image.png)'
+        copyrightNotice: '![Some image](cdn://media-library/JgTaqob5vqosBiHsZZoh1/some-image.png)'
       });
     });
 
     it('redacts a sourceUrl pointing to room-media from a different room', () => {
       const result = sut.redactContent({
         sourceUrl: 'cdn://room-media/63cHjt3BAhGnNxzJGrTsN1/some-file.mei',
-        caption: ''
+        copyrightNotice: ''
       }, 'rebhjf4MLq7yjeoCnYfn7E');
       expect(result).toStrictEqual({
         sourceUrl: '',
-        caption: ''
+        copyrightNotice: ''
       });
     });
 
     it('leaves a sourceUrl pointing to room-media from the same room intact', () => {
       const result = sut.redactContent({
         sourceUrl: 'cdn://room-media/63cHjt3BAhGnNxzJGrTsN1/some-file.mei',
-        caption: ''
+        copyrightNotice: ''
       }, '63cHjt3BAhGnNxzJGrTsN1');
       expect(result).toStrictEqual({
         sourceUrl: 'cdn://room-media/63cHjt3BAhGnNxzJGrTsN1/some-file.mei',
-        caption: ''
+        copyrightNotice: ''
       });
     });
   });
 
   describe('getCdnResources', () => {
-    it('returns media-library and room-media CDN resources from the caption and the sourceUrl', () => {
+    it('returns media-library and room-media CDN resources from the copyright notice and the sourceUrl', () => {
       const result = sut.getCdnResources({
         sourceUrl: 'cdn://room-media/63cHjt3BAhGnNxzJGrTsN1/some-file.mei',
-        caption: [
+        copyrightNotice: [
           '![Some image](cdn://media-library/JgTaqob5vqosBiHsZZoh1/some-image.png)',
           '![Some image](cdn://room-media/63cHjt3BAhGnNxzJGrTsN1/some-image.png)',
           '![Some image](https://external-domain.org/some-image.png)'
@@ -86,7 +86,7 @@ describe('mei-studio-info', () => {
     it('does not return an external sourceUrl', () => {
       const result = sut.getCdnResources({
         sourceUrl: 'https://external-domain.org/some-file.mei',
-        caption: ''
+        copyrightNotice: ''
       });
       expect(result).toStrictEqual([]);
     });

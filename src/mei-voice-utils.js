@@ -70,6 +70,94 @@ export function buildVoiceKeyByNoteId(processedMeiXmlString) {
   return voiceKeyById;
 }
 
+// Returns the xml:ids of every SVG element that has to be hidden to visually hide the given
+// voices. Two kinds of ids come out of this:
+// - note ids: the caller resolves these to their rendered <g class="note"> element and hides its
+//   closest <g class="layer"> ancestor instead of the note itself, because Verovio nests beams,
+//   tuplets etc. as siblings of the notes they group *inside* that layer group - hiding only the
+//   note leaves a floating beam/tuplet bracket behind. The layer group is the smallest container
+//   guaranteed to hold everything belonging to one staff/layer within one measure.
+// - tie/slur ids: rendered as their own top-level SVG group directly under <g class="measure">,
+//   not nested inside any <g class="layer"> - hiding the layer does nothing for them, so they're
+//   resolved (via their startid, which Verovio normalizes onto every tie/slur regardless of
+//   whether the source MEI used an explicit <tie>/<slur> element or the shorthand @tie attribute)
+//   and returned to be hidden directly by id instead.
+export function findVoiceHiddenElementIds(processedMeiXmlString, voiceKeyByNoteId, hiddenVoiceKeys) {
+  if (!hiddenVoiceKeys.length) {
+    return new Set();
+  }
+
+  const hiddenVoiceKeySet = new Set(hiddenVoiceKeys);
+  const idsToHide = new Set();
+
+  for (const [noteId, voiceKey] of voiceKeyByNoteId) {
+    if (hiddenVoiceKeySet.has(voiceKey)) {
+      idsToHide.add(noteId);
+    }
+  }
+
+  const doc = new DOMParser().parseFromString(processedMeiXmlString, 'application/xml');
+  for (const connector of doc.querySelectorAll('tie, slur')) {
+    const startId = (connector.getAttribute('startid') || '').replace(/^#/, '');
+    if (hiddenVoiceKeySet.has(voiceKeyByNoteId.get(startId))) {
+      const connectorId = connector.getAttribute('xml:id');
+      if (connectorId) {
+        idsToHide.add(connectorId);
+      }
+    }
+  }
+
+  return idsToHide;
+}
+
+// Maps each note id to an opacity (0..1, clamped) reflecting its voice's volume, for the
+// ear-training note-highlighting feature. Falls back to defaultVolume for any voice missing from
+// voiceVolumes (e.g. content saved before that voice was added to the mixer).
+export function buildNoteOpacitiesById(voiceKeyByNoteId, voiceVolumes, defaultVolume) {
+  return new Map(
+    [...voiceKeyByNoteId].map(([id, voiceKey]) => {
+      const volume = voiceVolumes[voiceKey] ?? defaultVolume;
+      return [id, Math.min(1, Math.max(0, volume))];
+    })
+  );
+}
+
+// Applies the ear-training note-opacity/highlight-color styling and voice-hiding to an already
+// rendered SVG (a container element holding Verovio's renderToSVG() output). Pure DOM
+// manipulation given its inputs, kept separate from mei-document.js so it can be unit-tested
+// without a real Verovio toolkit.
+export function applyVoiceStyling(container, { noteOpacitiesById, highlightColor, hiddenElementIds }) {
+  if (noteOpacitiesById) {
+    for (const noteGroup of container.querySelectorAll('.note')) {
+      if (noteOpacitiesById.has(noteGroup.id)) {
+        noteGroup.style.fill = highlightColor;
+        noteGroup.style.stroke = highlightColor;
+        noteGroup.style.opacity = noteOpacitiesById.get(noteGroup.id);
+      }
+    }
+  }
+
+  if (hiddenElementIds?.size) {
+    // Beams, tuplets etc. are nested as siblings of the notes they group *inside* the
+    // <g class="layer"> for that voice/measure, not inside any single note's own group - hiding
+    // just the note would leave a floating beam/tuplet bracket behind, so the whole layer group
+    // is hidden instead. Ties/slurs live outside any layer group (see findVoiceHiddenElementIds),
+    // so closest('.layer') is null for those ids and the element itself is hidden directly.
+    // A single querySelectorAll('[id]') pass (rather than one query per id) sidesteps CSS.escape
+    // entirely - not just cheaper, but ids are compared by plain string equality instead of being
+    // built into a CSS selector, so an id containing a CSS-meta character couldn't break the query.
+    const elementsToHide = new Set();
+    for (const element of container.querySelectorAll('[id]')) {
+      if (hiddenElementIds.has(element.id)) {
+        elementsToHide.add(element.closest('.layer') || element);
+      }
+    }
+    for (const element of elementsToHide) {
+      element.style.display = 'none';
+    }
+  }
+}
+
 // Shortens any silent gap longer than maxSilenceMs (during which no voice sounds at all) down to
 // exactly maxSilenceMs, shifting every later event earlier by the difference. Shorter gaps (normal
 // musical rests) are left untouched.
