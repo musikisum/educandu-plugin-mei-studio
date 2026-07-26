@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { applyVoiceStyling, buildNoteOpacitiesById, buildVoiceKeyByNoteId, collapseLongSilences, countNotes, extractVoices, findVoiceHiddenElementIds } from './mei-voice-utils.js';
+import { applyVoiceStyling, buildNoteOpacitiesById, buildVoiceKeyByNoteId, collapseLongSilences, countNotes, extractVoices, findVoiceHiddenElementIds, sanitizeNotationSvg } from './mei-voice-utils.js';
 
 const MEI_NAMESPACE = 'http://www.music-encoding.org/ns/mei';
 
@@ -197,6 +197,47 @@ describe('applyVoiceStyling', () => {
   it('ignores hidden ids that have no matching element', () => {
     const container = createContainer('<g id="n1" class="note"></g>');
     expect(() => applyVoiceStyling(container, { hiddenElementIds: new Set(['does-not-exist']) })).not.toThrow();
+  });
+});
+
+describe('sanitizeNotationSvg', () => {
+  it('leaves ordinary Verovio-shaped SVG content untouched', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><defs><path id="g1"/></defs>'
+      + '<g id="n1" class="note"><use xlink:href="#g1" transform="translate(1,2)"/></g></svg>';
+    const sanitized = sanitizeNotationSvg(svg);
+    expect(sanitized).toContain('<use');
+    expect(sanitized).toContain('xlink:href="#g1"');
+    expect(sanitized).toContain('id="n1"');
+    expect(sanitized).toContain('class="note"');
+  });
+
+  it('strips a <use> that references something other than a same-document fragment', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><use href="https://evil.example/x.svg#y"/></svg>';
+    const sanitized = sanitizeNotationSvg(svg);
+    expect(sanitized).not.toContain('evil.example');
+  });
+
+  it('strips a script tag', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(document.cookie)</script></svg>';
+    const sanitized = sanitizeNotationSvg(svg);
+    expect(sanitized).not.toContain('<script>');
+    expect(sanitized).not.toContain('alert(document.cookie)');
+  });
+
+  it('strips an inline event handler attribute', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><g id="n1" class="note"/></svg>';
+    const sanitized = sanitizeNotationSvg(svg);
+    expect(sanitized).not.toContain('onload');
+    expect(sanitized).toContain('id="n1"');
+  });
+
+  it('strips a javascript: URI', () => {
+    // eslint-disable-next-line no-script-url
+    const dangerousUri = 'javascript:alert(1)';
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg"><a href="${dangerousUri}"><text>click</text></a></svg>`;
+    const sanitized = sanitizeNotationSvg(svg);
+    // eslint-disable-next-line no-script-url
+    expect(sanitized).not.toContain('javascript:');
   });
 });
 

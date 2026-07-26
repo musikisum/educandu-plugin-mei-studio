@@ -7,8 +7,8 @@ import { useIsMounted } from '@educandu/educandu/ui/hooks.js';
 import { applyMeasuresPerLine } from './mei-layout-utils.js';
 import HttpClient from '@educandu/educandu/api-clients/http-client.js';
 import { useService } from '@educandu/educandu/components/container-context.js';
-import { applyVoiceStyling, buildNoteOpacitiesById, buildVoiceKeyByNoteId, collapseLongSilences, findVoiceHiddenElementIds } from './mei-voice-utils.js';
-import { DEFAULT_HIGHLIGHT_COLOR_VALUE, DEFAULT_MEASURES_PER_LINE_VALUE, DEFAULT_SPACING_SYSTEM_VALUE, DEFAULT_VOICE_VOLUME_VALUE, MAX_SILENCE_MS } from './constants.js';
+import { applyVoiceStyling, buildNoteOpacitiesById, buildVoiceKeyByNoteId, collapseLongSilences, countNotes, findVoiceHiddenElementIds, sanitizeNotationSvg } from './mei-voice-utils.js';
+import { DEFAULT_HIGHLIGHT_COLOR_VALUE, DEFAULT_MEASURES_PER_LINE_VALUE, DEFAULT_SPACING_SYSTEM_VALUE, DEFAULT_VOICE_VOLUME_VALUE, MAX_NOTE_COUNT_FOR_DISPLAY, MAX_SILENCE_MS } from './constants.js';
 
 // Verovio reports the specific reason a file failed to load (e.g. "No <body> element found in
 // the MEI data") only via console.error/console.warn, not via a return value or thrown error.
@@ -155,6 +155,14 @@ function MeiDocument({ url, withCredentials, zoom, width, spacingSystem, measure
             lastLoadedUrl.current = url;
           }
 
+          // Verovio lays out the whole document on the main thread - an extremely large or
+          // adversarially crafted file could hang the browser tab during that step. Checking the
+          // note count upfront (a cheap DOMParser pass) avoids ever starting that expensive step
+          // for a file far beyond what's practical to display at all.
+          if (countNotes(lastRawMeiData.current) > MAX_NOTE_COUNT_FOR_DISPLAY) {
+            throw new Error(t('renderTooLargeError'));
+          }
+
           const meiData = applyMeasuresPerLine(lastRawMeiData.current, measuresPerLine);
           const { result: isLoaded, messages } = captureVerovioMessages(() => toolkit.loadData(meiData));
           if (!isLoaded) {
@@ -213,7 +221,10 @@ function MeiDocument({ url, withCredentials, zoom, width, spacingSystem, measure
 
         const svg = toolkit.renderToSVG(1);
         if (isMounted.current && divRef.current) {
-          divRef.current.innerHTML = svg;
+          // The MEI file can come from anyone who can upload/link a file - sanitize Verovio's
+          // SVG output before inserting it, rather than trusting it as safe just because it comes
+          // from a notation-rendering library rather than directly from user input.
+          divRef.current.innerHTML = sanitizeNotationSvg(svg);
           applyVoiceStyling(divRef.current, { noteOpacitiesById, highlightColor, hiddenElementIds });
         }
         setNoteEvents(newNoteEvents);
@@ -244,7 +255,7 @@ function MeiDocument({ url, withCredentials, zoom, width, spacingSystem, measure
     return () => {
       isStale = true;
     };
-  }, [url, withCredentials, zoom, width, spacingSystem, measuresPerLine, soundEnabled, playbackEnabled, tempo, removeSilence, voiceVolumes, highlightColor, hiddenVoices, httpClient, isMounted]);
+  }, [url, withCredentials, zoom, width, spacingSystem, measuresPerLine, soundEnabled, playbackEnabled, tempo, removeSilence, voiceVolumes, highlightColor, hiddenVoices, httpClient, isMounted, t]);
 
   return (
     <div className="EP_Musikisum_MeiStudio_Document">

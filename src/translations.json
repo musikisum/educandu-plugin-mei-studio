@@ -32,6 +32,10 @@
       "en": "This is a large file. Loading and displaying it may take a while.",
       "de": "Dies ist eine große Datei. Laden und Anzeigen können eine Weile dauern."
     },
+    "renderTooLargeError": {
+      "en": "This file has too many notes to display safely in the browser.",
+      "de": "Diese Datei hat zu viele Noten, um sie sicher im Browser anzuzeigen."
+    },
     "playbackEnabled": {
       "en": "Ear training",
       "de": "Gehörbildung"

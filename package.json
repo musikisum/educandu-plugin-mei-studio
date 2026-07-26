@@ -18,7 +18,7 @@
     "educandu"
   ],
   "license": "MIT",
-  "author": "Educandu Team <team@educandu.dev>",
+  "author": "Educandu Team <team@educandu.dev>, Ulrich Kaiser <kontakt@kaiser-ulrich.de>",
   "homepage": "https://github.com/musikisum/educandu-plugin-mei-studio",
   "repository": {
     "type": "git",
@@ -28,6 +28,7 @@
     "postinstall": "node scripts/patch-verovio.mjs"
   },
   "dependencies": {
+    "dompurify": "^3.4.12",
     "smplr": "^1.0.0",
     "verovio": "^6.2.0"
   },

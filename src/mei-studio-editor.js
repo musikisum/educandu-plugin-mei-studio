@@ -257,8 +257,8 @@ export default function MeiStudioEditor({ content, onContentChanged }) {
               <StepSlider
                 step={0.05}
                 value={tempoValue}
-                marksStep={0.2}
-                labelsStep={1}
+                marksStep={0.25}
+                labelsStep={0.25}
                 min={MIN_TEMPO_VALUE}
                 max={MAX_TEMPO_VALUE}
                 onChange={handleTempoChange}

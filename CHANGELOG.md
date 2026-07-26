@@ -4,6 +4,80 @@ Entwicklungsnotizen für `musikisum/educandu-plugin-mei-studio`. Nicht auf
 Nutzer:innen ausgerichtet, sondern als Gedächtnisstütze für künftige
 Weiterentwicklung — was wurde gebaut, warum, und welche Fallstricke gab es.
 
+## 2026-07-26 (10) — Drei Nachbesserungen aus dem ersten Browser-Test von v1.1.0
+
+**DOMPurify-Absicherung brach den Seitenaufruf lokal:** `TypeError:
+DOMPurify.addHook is not a function`. Ursache: der Hook wurde als
+Seiteneffekt beim Modul-Import registriert
+(`DOMPurify.addHook(...)` auf oberster Ebene in `mei-voice-utils.js`) -
+educandu rendert Display-Komponenten aber auch serverseitig (SSR, kein
+echtes `window`), und DOMPurifys automatisch erzeugte Instanz hat dort nicht
+die volle Hook-Infrastruktur. Behoben durch verzögerte (lazy) Registrierung
+beim ersten tatsächlichen Aufruf von `sanitizeNotationSvg()` - die Funktion
+wird ohnehin nur aus `mei-document.js`s Lade-Effekt aufgerufen, der nie
+während SSR läuft. Gegengeprüft: `mei-voice-utils.js` importieren in einem
+Node-Prozess ganz ohne DOM-Globals (simuliert SSR) schlägt jetzt nicht mehr
+fehl.
+
+**Lautstärkeregler im Wiedergabe-Player reagierte nicht:** `MediaPlayer`/
+`MediaPlayerControls` verwalten ihre Lautstärke intern selbst
+(`internalVolume` + `onVolumeChange`), *außer* man übergibt selbst eine
+`volume`-Prop - die überschreibt dann bei jedem Render den internen Wert,
+unabhängig davon, was am Regler eingestellt wurde. `mei-playback.js` hatte
+genau das getan (`volume={VOLUME}`, `VOLUME = 1` fest verdrahtet), obwohl
+andere educandu-Plugins (abc-notation, audio) diese Prop gar nicht erst
+setzen. Entfernt, Lautstärke wird jetzt wie überall sonst intern verwaltet.
+
+**Tempo-Bereich auf 25 %–200 % verengt** (vorher 20 %–400 %, Verovios eigene
+Obergrenze) - 400 % ist musikalisch nicht sinnvoll nutzbar. Schrittweite
+bleibt 0.05, wirkt über den schmaleren Bereich automatisch feinkörniger.
+Markierungen und Beschriftungen jetzt alle 25 % (vorher alle 20 %/100 %).
+
+## 2026-07-26 (9) — Härtung gegen bösartige MEI-Dateien vor v1.1.0
+
+Frage im Review: Was, wenn jemand eine bösartige Datei hochlädt/verlinkt und
+als MEI tarnt? `sourceUrl` akzeptiert jede erreichbare Datei, Verovio
+versucht sie zu laden, das Ergebnis landet direkt per `innerHTML` im DOM
+(`mei-document.js`) - grundsätzlich ein XSS-relevantes Muster, wenn der
+Inhalt nicht vertrauenswürdig ist (jede Person mit Datei-Upload/Link-Rechten
+kontrolliert ihn).
+
+**Empirisch getestet statt spekuliert:** Eigene MEI-Datei mit
+`<script>alert(document.cookie)</script>` in einer Notationsdirektive gebaut
+und durch den echten Verovio-Renderer laufen lassen. Ergebnis: Verovios
+eigene XML-Serialisierung escaped Textinhalte korrekt (`&lt;script&gt;...`
+statt echtem Markup) - kein Befund, aber auch keine Garantie für alle
+Zukunfts-/Randfälle einer fremden Bibliothek.
+
+**Umgesetzt: `DOMPurify` als Defense-in-Depth-Schicht vor jedem `innerHTML`.**
+Wichtigster Stolperstein dabei: DOMPurifys Standard-SVG-Profil verbietet
+`<use>` komplett (kann auf externe Dokumente verweisen) - Verovio zeichnet
+darüber aber praktisch jedes sichtbare Zeichen (Notenköpfe, Schlüssel,
+Vorzeichen sind alle `<use href="#glyphId">`-Referenzen in die eigenen
+`<defs>`). Mit der Standardkonfiguration wäre die sanitisierte Notenansicht
+fast leer gewesen. Gelöst über `ADD_TAGS: ['use']` plus einen
+`uponSanitizeAttribute`-Hook, der `href`/`xlink:href` bei `<use>` auf
+document-lokale `#fragment`-Referenzen einschränkt (die einzige Form, die
+Verovio je erzeugt) - external URLs, `javascript:` etc. bleiben blockiert.
+Gegen beide Testdateien in `assets/` geprüft: `<use>`-Anzahl, Noten-Anzahl
+und alle IDs vor/nach Sanitisierung identisch, ein eingeschleuster
+`<script>`/`onload=`/`javascript:`-Payload wird zuverlässig entfernt.
+`sanitizeNotationSvg()` in `mei-voice-utils.js`, mit Unit-Tests.
+
+**Separat gefunden, selbe Sitzung: keine Größenbremse für die
+Notenansicht selbst.** `MAX_NOTE_COUNT_FOR_PLAYBACK` (800) deckelt nur die
+Audio-Erzeugung, nicht das SVG-Rendering/Layout durch Verovio, das im
+Hauptthread läuft (kein Web Worker) - eine sehr große oder gezielt
+pathologische Datei könnte den Browser-Tab beim Layout einfrieren. Neue,
+bewusst viel höhere Bremse `MAX_NOTE_COUNT_FOR_DISPLAY` (20000) speziell für
+die Anzeige ergänzt (per `countNotes()`-Vorabprüfung auf der rohen
+MEI-Datei, bevor Verovio überhaupt geladen wird) - deutlich über der
+Audio-Grenze, da Noten-Layout pro Note viel billiger ist als
+Audio-Synthese pro Note. Bewusst nicht dieselbe 800er-Grenze wiederverwendet:
+reguläre Stücke mit mehreren hundert Noten (z. B. eine mehrstimmige Messe)
+sollen weiterhin normal angezeigt werden, auch wenn Wiedergabe dafür schon
+deaktiviert ist.
+
 ## 2026-07-26 (8) — Vor-Release-Aufräumen: Crash-Sicherheit, Dateigröße, Testabdeckung
 
 Vor dem ersten Versions-Tag noch einmal gezielt durchgesehen (nicht als

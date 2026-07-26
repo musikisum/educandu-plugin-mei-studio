@@ -13,7 +13,6 @@ import MediaPlayerControls, { MEDIA_PLAYER_CONTROLS_STATE } from '@educandu/educ
 
 const logger = new Logger(import.meta.url);
 
-const VOLUME = 1;
 const MIN_VELOCITY = 45;
 const MAX_VELOCITY = 100;
 const DOWNLOAD_FILE_NAME = 'wiedergabe.wav';
@@ -141,7 +140,6 @@ function MeiPlayback({ noteEvents, voiceVolumes }) {
             allowDownload
             allowPlaybackRate
             state={controlsState}
-            volume={VOLUME}
             onPlayClick={handlePlayClick}
             />
         </div>
@@ -156,7 +154,6 @@ function MeiPlayback({ noteEvents, voiceVolumes }) {
         allowDownload
         allowPlaybackRate
         sourceUrl={soundUrl}
-        volume={VOLUME}
         mediaPlayerRef={mediaPlayerRef}
         screenMode={MEDIA_SCREEN_MODE.none}
         downloadFileName={DOWNLOAD_FILE_NAME}

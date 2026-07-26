@@ -1,3 +1,40 @@
+import DOMPurify from 'dompurify';
+
+const SANITIZE_SVG_CONFIG = { USE_PROFILES: { svg: true, svgFilters: true }, ADD_TAGS: ['use'] };
+
+let isUseHookRegistered = false;
+
+// Sanitizes SVG markup rendered by Verovio from MEI data before it gets inserted via innerHTML
+// (see mei-document.js) - the MEI file can come from anyone who can upload/link a file, so it has
+// to be treated as untrusted input. Verovio's own XML serialization already escapes text/attribute
+// content correctly (verified empirically against injected <script>/event-handler payloads before
+// this was added), but this stays in as a defense-in-depth layer independent of that: it doesn't
+// require trusting every past and future Verovio version to always get escaping right.
+export function sanitizeNotationSvg(svg) {
+  // Registered lazily on first actual (client-only, called from mei-document.js's effect) call
+  // rather than as a module-load side effect: DOMPurify's default export auto-invokes itself
+  // against whatever "window" it detects at import time, and educandu also imports/renders
+  // display components during server-side rendering (no real DOM there) - calling DOMPurify
+  // methods at module scope broke with "addHook is not a function" under SSR, since the
+  // auto-detected non-browser instance doesn't have the full hook machinery set up.
+  if (!isUseHookRegistered) {
+    // <use> is excluded from DOMPurify's default SVG profile (it can reference external
+    // documents), but Verovio uses it for essentially every visible glyph (noteheads, clefs,
+    // accidentals - all drawn as <use href="#glyph-id"> pointing into the document's own <defs>).
+    // Re-allow the tag, but only let its href stay a same-document fragment reference ("#..."),
+    // which is the only form Verovio ever emits - anything else (e.g. a reference to an external
+    // document) is stripped.
+    DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
+      if (node.tagName?.toLowerCase() === 'use' && (data.attrName === 'href' || data.attrName === 'xlink:href') && !data.attrValue.startsWith('#')) {
+        data.keepAttr = false;
+      }
+    });
+    isUseHookRegistered = true;
+  }
+
+  return DOMPurify.sanitize(svg, SANITIZE_SVG_CONFIG);
+}
+
 function findLabel(defElement) {
   if (!defElement) {
     return null;
