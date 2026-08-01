@@ -72,7 +72,7 @@ export default function MeiStudioDisplay({ content }) {
 
   return (
     <div className="EP_Musikisum_MeiStudio_Display">
-      <div className={`EP_Musikisum_MeiStudio_Display-viewer u-width-${width || 100}`}>
+      <div className={`EP_Musikisum_MeiStudio_Display-viewer u-horizontally-centered u-width-${width || 100}`}>
         <MeiDocument
           url={actualUrl}
           withCredentials={withCredentials}
@@ -106,7 +106,7 @@ export default function MeiStudioDisplay({ content }) {
           />
       )}
       {!!copyrightNotice && (
-        <div className={`EP_Musikisum_MeiStudio_Display-copyrightNotice u-width-${width || 100}`}>
+        <div className={`EP_Musikisum_MeiStudio_Display-copyrightNotice u-horizontally-centered u-width-${width || 100}`}>
           <CopyrightNotice value={copyrightNotice} />
         </div>
       )}
