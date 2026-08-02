@@ -1,6 +1,6 @@
 {
   "name": "@musikisum/educandu-plugin-mei-studio",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "An educandu plugin to import MEI (Music Encoding Initiative) files and display musical notation",
   "type": "module",
   "files": [
