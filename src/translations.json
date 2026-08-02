@@ -17,8 +17,8 @@
       "de": "Takte pro Zeile"
     },
     "measuresPerLineInfo": {
-      "en": "At 0 (automatic), Verovio breaks lines by available width, as before. At a value above 0, exactly that many measures are forced onto each line, overriding any line breaks encoded in the file.",
-      "de": "Bei 0 (automatisch) bricht Verovio Zeilen wie bisher nach verfügbarer Breite um. Bei einem Wert über 0 wird auf jeder Zeile genau diese Anzahl Takte erzwungen, im MEI-Dokument codierte Zeilenumbrüche werden dabei überschrieben."
+      "en": "At 0 (automatic), the notation wraps lines by available width. At a value above 0, that many measures are forced onto each line, overriding any line breaks encoded in the MEI document.",
+      "de": "Bei 0 (automatisch) bricht die Notenanzeige nach verfügbarer Breite um. Bei einem Wert über 0 wird auf jeder Zeile die entsprechende Anzahl Takte erzwungen, im MEI-Dokument codierte Zeilenumbrüche werden dabei überschrieben."
     },
     "automatic": {
       "en": "Automatic",
@@ -41,16 +41,16 @@
       "de": "Gehörbildung"
     },
     "playbackEnabledInfo": {
-      "en": "Adds ear-training tools for multi-voice pieces - setting the volume of each voice individually, highlighting the currently audible voice in the notation, and hiding voices from the notation. Playback itself works regardless of this setting.",
-      "de": "Fügt Gehörbildungswerkzeuge für mehrstimmige Stücke hinzu - die Lautstärke jeder Stimme einzeln einstellen, die gerade hörbare Stimme in der Notation hervorheben, und Stimmen aus der Notation ausblenden. Die Wiedergabe selbst funktioniert unabhängig von dieser Einstellung."
+      "en": "Adds ear-training tools for multi-voice pieces: set the volume of each voice individually, highlight the currently audible voice in the notation, and hide voices from the notation. Playback itself works independently of this setting.",
+      "de": "Fügt Gehörbildungswerkzeuge für mehrstimmige Stücke hinzu die Lautstärke jeder Stimme einzeln einstellen: die gerade hörbare Stimme in der Notation hervorheben und Stimmen aus der Notation ausblenden. Die Wiedergabe selbst funktioniert unabhängig von dieser Einstellung."
     },
     "tempo": {
       "en": "Tempo",
       "de": "Tempo"
     },
     "tempoInfo": {
-      "en": "Scales the playback speed. This is applied when the audio is generated, not as a playback-rate effect on the finished recording, so pitch stays natural at every speed.",
-      "de": "Skaliert das Wiedergabetempo. Das wirkt schon bei der Erzeugung der Audiodatei, nicht als nachträglicher Geschwindigkeitseffekt auf die fertige Aufnahme, daher bleibt die Tonhöhe bei jedem Tempo natürlich."
+      "en": "Scales the playback speed without artifacts in the audio.",
+      "de": "Skaliert das Wiedergabetempo ohne Artefakte in der Wiedergabe."
     },
     "removeSilence": {
       "en": "Remove silence",
@@ -89,12 +89,12 @@
       "de": "Ausblenden"
     },
     "hiddenVoicesInfo": {
-      "en": "Hides the selected voices from the notation. Playback is not affected - the voices keep sounding, only their notation is hidden.",
-      "de": "Blendet die ausgewählten Stimmen aus der Notenansicht aus. Die Wiedergabe ist davon nicht betroffen - die Stimmen sind weiterhin zu hören, nur die Notation wird ausgeblendet."
+      "en": "Hides the selected voices from the notation. Playback is not affected.",
+      "de": "Blendet die ausgewählten Stimmen aus der Notenansicht aus. Die Wiedergabe ist davon nicht betroffen."
     },
     "practiceControls": {
       "en": "Practice settings",
-      "de": "Übeeinstellungen"
+      "de": "Einstellungen zum Üben"
     },
     "playbackSettings": {
       "en": "Playback",
@@ -105,8 +105,8 @@
       "de": "Gehörbildung"
     },
     "soundEnabledInfo": {
-      "en": "Adds an audio playback with a piano sound, generated from the notation. Turn this off if no playback is wanted for this section.",
-      "de": "Fügt eine aus der Notation erzeugte Audio-Wiedergabe mit Klaviersound hinzu. Ausschalten, wenn für diesen Abschnitt keine Wiedergabe gewünscht ist."
+      "en": "Adds an audio playback with a piano sound, generated from the notation.",
+      "de": "Fügt eine aus der Notation erzeugte Audio-Wiedergabe mit Klaviersound hinzu."
     },
     "practiceControlsRerenderHint": {
       "en": "Changing any setting here regenerates the audio and restarts playback from the beginning.",

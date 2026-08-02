@@ -3,7 +3,7 @@ import { extractVoices } from './mei-voice-utils.js';
 import CopyrightNotice from '@educandu/educandu/components/copyright-notice.js';
 import ClientConfig from '@educandu/educandu/bootstrap/client-config.js';
 import HttpClient from '@educandu/educandu/api-clients/http-client.js';
-import { useIsMounted } from '@educandu/educandu/ui/hooks.js';
+import { useDebouncedCallback, useIsMounted } from '@educandu/educandu/ui/hooks.js';
 import React, { useEffect, useState } from 'react';
 import MeiStudioPracticeControls from './mei-studio-practice-controls.js';
 import { getAccessibleUrl, isInternalSourceType } from '@educandu/educandu/utils/source-utils.js';
@@ -28,6 +28,23 @@ export default function MeiStudioDisplay({ content }) {
   const [practiceVoiceVolumes, setPracticeVoiceVolumes] = useState(voiceVolumes || {});
   const [practiceHighlightColor, setPracticeHighlightColor] = useState(highlightColor || DEFAULT_HIGHLIGHT_COLOR_VALUE);
   const [practiceHiddenVoices, setPracticeHiddenVoices] = useState(hiddenVoices || []);
+
+  // Both the tempo slider and the voice volume mixer fire their change event continuously while
+  // dragging - feeding that straight into MeiDocument would re-run its expensive Verovio re-render
+  // on every tick. So each gets a second, separate state that only feeds MeiDocument: the tempo
+  // slider (our own StepSlider) exposes a proper "drag complete" event, so its document-facing
+  // state only updates once, exactly when dragging ends. The mixer (TrackMixerDisplay, reused from
+  // educandu) offers no such event, so its document-facing state is debounced instead. Either way,
+  // practiceTempo/practiceVoiceVolumes keep updating immediately so the sliders themselves stay
+  // responsive - only the (expensive) value passed to MeiDocument lags behind.
+  const [documentTempo, setDocumentTempo] = useState(practiceTempo);
+  const [documentVoiceVolumes, setDocumentVoiceVolumes] = useState(practiceVoiceVolumes);
+  const setDocumentVoiceVolumesDebounced = useDebouncedCallback(setDocumentVoiceVolumes, 250);
+
+  const handlePracticeVoiceVolumesChange = newVoiceVolumes => {
+    setPracticeVoiceVolumes(newVoiceVolumes);
+    setDocumentVoiceVolumesDebounced(newVoiceVolumes);
+  };
 
   const actualUrl = sourceUrl
     ? getAccessibleUrl({ url: sourceUrl, cdnRootUrl: clientConfig.cdnRootUrl })
@@ -82,9 +99,9 @@ export default function MeiStudioDisplay({ content }) {
           measuresPerLine={measuresPerLine}
           soundEnabled={soundEnabledValue}
           playbackEnabled={playbackEnabled}
-          tempo={practiceTempo}
+          tempo={documentTempo}
           removeSilence={practiceRemoveSilence}
-          voiceVolumes={practiceVoiceVolumes}
+          voiceVolumes={documentVoiceVolumes}
           highlightColor={practiceHighlightColor}
           hiddenVoices={practiceHiddenVoices}
           />
@@ -99,8 +116,9 @@ export default function MeiStudioDisplay({ content }) {
           highlightColor={practiceHighlightColor}
           hiddenVoices={practiceHiddenVoices}
           onTempoChange={setPracticeTempo}
+          onTempoChangeComplete={setDocumentTempo}
           onRemoveSilenceChange={setPracticeRemoveSilence}
-          onVoiceVolumesChange={setPracticeVoiceVolumes}
+          onVoiceVolumesChange={handlePracticeVoiceVolumesChange}
           onHighlightColorChange={setPracticeHighlightColor}
           onHiddenVoicesChange={setPracticeHiddenVoices}
           />

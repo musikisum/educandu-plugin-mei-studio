@@ -23,6 +23,7 @@ function MeiStudioPracticeControls({
   highlightColor,
   hiddenVoices,
   onTempoChange,
+  onTempoChangeComplete,
   onRemoveSilenceChange,
   onVoiceVolumesChange,
   onHighlightColorChange,
@@ -57,6 +58,7 @@ function MeiStudioPracticeControls({
                 min={MIN_TEMPO_VALUE}
                 max={MAX_TEMPO_VALUE}
                 onChange={onTempoChange}
+                onChangeComplete={onTempoChangeComplete}
                 formatter={percentageFormatter}
                 />
             </div>
@@ -101,6 +103,7 @@ MeiStudioPracticeControls.propTypes = {
   highlightColor: PropTypes.string.isRequired,
   hiddenVoices: PropTypes.arrayOf(PropTypes.string).isRequired,
   onTempoChange: PropTypes.func.isRequired,
+  onTempoChangeComplete: PropTypes.func.isRequired,
   onRemoveSilenceChange: PropTypes.func.isRequired,
   onVoiceVolumesChange: PropTypes.func.isRequired,
   onHighlightColorChange: PropTypes.func.isRequired,
