@@ -15,11 +15,11 @@ jobs:
       JIRA_PROJECT_KEYS: EDU
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4.2.1
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
       - name: Install node
-        uses: actions/setup-node@v6.0.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: "20.17.0"
           cache: "yarn"
