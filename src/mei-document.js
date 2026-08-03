@@ -136,7 +136,7 @@ function MeiDocument({ url, withCredentials, zoom, width, spacingSystem, measure
         toolkit.setOptions({
           scale,
           adjustPageHeight: true,
-          pageWidth: Math.round(containerWidth * 100 / scale),
+          pageWidth: Math.floor(containerWidth * 100 / scale),
           pageHeight: 60000,
           spacingSystem,
           breaks: measuresPerLine > 0 ? 'encoded' : 'auto',
